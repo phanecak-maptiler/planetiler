@@ -5,7 +5,7 @@ name: Performance
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, test ]
 
 env:
   # For performance tests, run this branch against main with:

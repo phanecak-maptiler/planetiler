@@ -5,13 +5,13 @@ name: Publish a Snapshot
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, test ]
   workflow_dispatch:
     inputs:
       image_tags:
         description: 'Extra docker image tags ("latest,test")'
         required: true
-        default: 'latest,snapshot'
+        default: 'latest,snapshot,test'
 
 jobs:
   snapshot:

@@ -62,7 +62,7 @@ jobs:
           </tr>
           </table>
 
-          https://github.com/onthegomap/planetiler/actions/runs/${{ github.event.workflow_run.id }}
+          https://github.com/phanecak-maptiler/planetiler/actions/runs/${{ github.event.workflow_run.id }}
 
           <details><summary>ℹ️ <strong>Base Logs $(cat build-info/base_sha)</strong></summary>
 
