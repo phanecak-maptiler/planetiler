@@ -44,17 +44,8 @@ jobs:
         with:
           name: planetiler-build
           path: planetiler-dist/target/*with-deps.jar
-      - name: Install GPG Private Key
-        with:
-          key_secret: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
-        if: ${{ key_secret != '' }}
-        run: |
-          echo -n "${{ secrets.OSSRH_GPG_SECRET_KEY }}" | base64 --decode | gpg --batch --import
       - run: ./scripts/push-release.sh
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_TAGS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tags || 'latest,snapshot,test' }}
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          OSSRH_GPG_SECRET_KEY_PASSWORD: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
