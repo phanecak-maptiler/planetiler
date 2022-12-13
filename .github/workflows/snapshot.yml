@@ -5,7 +5,7 @@ name: Publish a Snapshot
 
 on:
   push:
-    branches: [ main, test ]
+    branches: [ test ]
   workflow_dispatch:
     inputs:
       image_tags:
@@ -51,7 +51,7 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_TAGS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tags || 'latest,snapshot' }}
+          IMAGE_TAGS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tags || 'latest,snapshot,test' }}
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           OSSRH_GPG_SECRET_KEY_PASSWORD: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
