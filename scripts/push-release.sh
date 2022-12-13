@@ -8,6 +8,7 @@ if [ -n "${IMAGE_TAGS:-}" ]; then
   TAGS="-Djib.to.tags=${IMAGE_TAGS// /}"
 fi
 
+false && \
 ./mvnw -B -ntp -DskipTests "${TAGS}" -Pjib-multi-arch \
   -Dimage.version="${VERSION}" \
   -Djib.to.auth.username="${GITHUB_ACTOR}" \
