@@ -23,6 +23,7 @@ import com.onthegomap.planetiler.reader.osm.OsmElement;
 import com.onthegomap.planetiler.reader.osm.OsmReader;
 import com.onthegomap.planetiler.reader.osm.OsmRelationInfo;
 import com.onthegomap.planetiler.stats.Stats;
+import com.onthegomap.planetiler.util.BuildInfo;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -247,6 +248,9 @@ class PlanetilerTests {
       "maxzoom", "14",
       "center", "0,0,0",
       "bounds", "-180,-85.05113,180,85.05113"
+    ), results.metadata);
+    assertSubmap(Map.of(
+      "planetiler:version", BuildInfo.get().version()
     ), results.metadata);
     assertSameJson(
       """
@@ -1663,6 +1667,7 @@ class PlanetilerTests {
       .addOsmSource("osm", tempOsm)
       .addNaturalEarthSource("ne", TestUtils.pathToResource("natural_earth_vector.sqlite"))
       .addShapefileSource("shapefile", TestUtils.pathToResource("shapefile.zip"))
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
       .setOutput("mbtiles", mbtiles)
       .run();
 
@@ -1683,6 +1688,12 @@ class PlanetilerTests {
 
       assertEquals(11, tileMap.size(), "num tiles");
       assertEquals(2146, features, "num buildings");
+      assertSubmap(Map.of(
+        "planetiler:version", BuildInfo.get().version(),
+        "planetiler:osm:osmosisreplicationtime", "2021-04-21T20:21:46Z",
+        "planetiler:osm:osmosisreplicationseq", "2947",
+        "planetiler:osm:osmosisreplicationurl", "http://download.geofabrik.de/europe/monaco-updates"
+      ), db.metadata().getAll());
     }
   }
 
@@ -1697,7 +1708,8 @@ class PlanetilerTests {
         public void processFeature(SourceFeature source, FeatureCollector features) {
           features.point("stations")
             .setZoomRange(0, 14)
-            .setAttr("source", source.getSource());
+            .setAttr("source", source.getSource())
+            .setAttr("layer", source.getSourceLayer());
         }
       })
       // Match *.shp within [shapefile.zip, shapefile-copy.zip]
@@ -1715,7 +1727,7 @@ class PlanetilerTests {
       for (var tile : tileMap.values()) {
         for (var feature : tile) {
           feature.geometry().validate();
-
+          assertEquals("stations", feature.attrs().get("layer"));
           switch ((String) feature.attrs().get("source")) {
             case "shapefile" -> fileCount++;
             case "shapefile-glob" -> globCount++;
@@ -1732,12 +1744,52 @@ class PlanetilerTests {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "",
+    "--write-threads=2 --process-threads=2 --feature-read-threads=2 --threads=4",
+  })
+  void testPlanetilerRunnerGeoPackage(String args) throws Exception {
+    Path mbtiles = tempDir.resolve("output.mbtiles");
+
+    Planetiler.create(Arguments.fromArgs((args + " --tmpdir=" + tempDir.resolve("data")).split("\\s+")))
+      .setProfile(new Profile.NullProfile() {
+        @Override
+        public void processFeature(SourceFeature source, FeatureCollector features) {
+          features.point("stations")
+            .setZoomRange(0, 14)
+            .setAttr("name", source.getString("name"));
+        }
+      })
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
+      .setOutput("mbtiles", mbtiles)
+      .run();
+
+    try (Mbtiles db = Mbtiles.newReadOnlyDatabase(mbtiles)) {
+      Set<String> uniqueNames = new HashSet<>();
+      long featureCount = 0;
+      var tileMap = TestUtils.getTileMap(db);
+      for (var tile : tileMap.values()) {
+        for (var feature : tile) {
+          feature.geometry().validate();
+          featureCount++;
+          uniqueNames.add((String) feature.attrs().get("name"));
+        }
+      }
+
+      assertTrue(featureCount > 0);
+      assertEquals(86, uniqueNames.size());
+      assertTrue(uniqueNames.contains("Van Dörn Street"));
+    }
+  }
+
   private void runWithProfile(Path tempDir, Profile profile, boolean force) throws Exception {
     Planetiler.create(Arguments.of("tmpdir", tempDir, "force", Boolean.toString(force)))
       .setProfile(profile)
       .addOsmSource("osm", TestUtils.pathToResource("monaco-latest.osm.pbf"))
       .addNaturalEarthSource("ne", TestUtils.pathToResource("natural_earth_vector.sqlite"))
       .addShapefileSource("shapefile", TestUtils.pathToResource("shapefile.zip"))
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
       .setOutput("mbtiles", tempDir.resolve("output.mbtiles"))
       .run();
   }
