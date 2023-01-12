@@ -66,7 +66,7 @@ public class BenchmarkMbtilesWriter {
     for (int repetition = 0; repetition < repetitions; repetition++) {
 
       Path outputPath = getTempOutputPath();
-      try (var mbtiles = Mbtiles.newWriteToFileDatabase(outputPath, config.compactDb())) {
+      try (var mbtiles = Mbtiles.newWriteToFileDatabase(outputPath, config.compactDb(), config.hashAsTileId())) {
 
         if (config.skipIndexCreation()) {
           mbtiles.createTablesWithoutIndexes();

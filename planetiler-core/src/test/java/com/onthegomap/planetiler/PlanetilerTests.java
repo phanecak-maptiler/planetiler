@@ -140,7 +140,7 @@ class PlanetilerTests {
     FeatureGroup featureGroup = FeatureGroup.newInMemoryFeatureGroup(profile, stats);
     runner.run(featureGroup, profile, config);
     featureGroup.prepare();
-    try (Mbtiles db = Mbtiles.newInMemoryDatabase(config.compactDb())) {
+    try (Mbtiles db = Mbtiles.newInMemoryDatabase(config.compactDb(), config.hashAsTileId())) {
       MbtilesWriter.writeOutput(featureGroup, db, () -> 0L, new MbtilesMetadata(profile, config.arguments()), config,
         stats);
       var tileMap = TestUtils.getTileMap(db);

@@ -21,6 +21,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.locationtech.jts.geom.Envelope;
 
@@ -34,9 +35,10 @@ class MbtilesTest {
 
   private static final
 
-    void testWriteTiles(int howMany, boolean skipIndexCreation, boolean optimize, boolean compactDb)
+    void testWriteTiles(int howMany, boolean skipIndexCreation, boolean optimize, boolean compactDb,
+      boolean hashAsTileId)
       throws IOException, SQLException {
-    try (Mbtiles db = Mbtiles.newInMemoryDatabase(compactDb)) {
+    try (Mbtiles db = Mbtiles.newInMemoryDatabase(compactDb, hashAsTileId)) {
       if (skipIndexCreation) {
         db.createTablesWithoutIndexes();
       } else {
@@ -83,30 +85,42 @@ class MbtilesTest {
   @ParameterizedTest
   @ValueSource(ints = {0, 1, TILES_BATCH, TILES_BATCH + 1, 2 * TILES_BATCH, 2 * TILES_BATCH + 1})
   void testWriteTilesDifferentSizeInNonCompactMode(int howMany) throws IOException, SQLException {
-    testWriteTiles(howMany, false, false, false);
+    testWriteTiles(howMany, false, false, false, false);
   }
 
   @ParameterizedTest
   @ValueSource(ints = {0, 1, TILES_DATA_BATCH, TILES_DATA_BATCH + 1, 2 * TILES_DATA_BATCH, 2 * TILES_DATA_BATCH + 1,
     TILES_SHALLOW_BATCH, TILES_SHALLOW_BATCH + 1, 2 * TILES_SHALLOW_BATCH, 2 * TILES_SHALLOW_BATCH + 1})
   void testWriteTilesDifferentSizeInCompactMode(int howMany) throws IOException, SQLException {
-    testWriteTiles(howMany, false, false, true);
+    testWriteTiles(howMany, false, false, true, false);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, TILES_DATA_BATCH, TILES_DATA_BATCH + 1, 2 * TILES_DATA_BATCH, 2 * TILES_DATA_BATCH + 1,
+    TILES_SHALLOW_BATCH, TILES_SHALLOW_BATCH + 1, 2 * TILES_SHALLOW_BATCH, 2 * TILES_SHALLOW_BATCH + 1})
+  void testWriteTilesDifferentSizeInCompactModeWithHashAsId(int howMany) throws IOException, SQLException {
+    testWriteTiles(howMany, false, false, true, true);
   }
 
   @Test
   void testSkipIndexCreation() throws IOException, SQLException {
-    testWriteTiles(10, true, false, false);
+    testWriteTiles(10, true, false, false, false);
   }
 
   @Test
   void testVacuumAnalyze() throws IOException, SQLException {
-    testWriteTiles(10, false, true, false);
+    testWriteTiles(10, false, true, false, false);
   }
 
   @ParameterizedTest
-  @ValueSource(booleans = {true, false})
-  void testManualIndexCreationStatements(boolean compactDb) throws IOException, SQLException {
-    try (Mbtiles db = Mbtiles.newInMemoryDatabase(compactDb)) {
+  @CsvSource({
+    "true, false",
+    "true, true",
+    "false, false"
+  })
+  // false+true is unsupported combination, see next test
+  void testManualIndexCreationStatements(boolean compactDb, boolean hashAsTileId) throws IOException, SQLException {
+    try (Mbtiles db = Mbtiles.newInMemoryDatabase(compactDb, hashAsTileId)) {
       db.createTablesWithoutIndexes();
 
       List<String> indexCreationStmts = db.getManualIndexCreationStatements();
@@ -117,6 +131,11 @@ class MbtilesTest {
         }
       }
     }
+  }
+
+  @Test
+  void testUnsupportedCompactSettingCombo() {
+    assertThrows(IllegalArgumentException.class, () -> testWriteTiles(10, false, true, false, true));
   }
 
   @Test

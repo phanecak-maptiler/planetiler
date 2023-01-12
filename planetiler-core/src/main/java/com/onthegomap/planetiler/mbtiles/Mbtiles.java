@@ -3,6 +3,7 @@ package com.onthegomap.planetiler.mbtiles;
 import static com.fasterxml.jackson.annotation.JsonInclude.Include.NON_ABSENT;
 
 import com.carrotsearch.hppc.LongIntHashMap;
+import com.carrotsearch.hppc.LongLongHashMap;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -88,30 +89,36 @@ public final class Mbtiles implements Closeable {
   private final Connection connection;
   private PreparedStatement getTileStatement = null;
   private final boolean compactDb;
+  private final boolean hashAsTileId;
 
-  private Mbtiles(Connection connection, boolean compactDb) {
+  private Mbtiles(Connection connection, boolean compactDb, boolean hashAsTileId) throws IllegalArgumentException {
+    if (hashAsTileId && !compactDb) {
+      throw new IllegalArgumentException("compactDb=false with hashAsTileId=true is NOT supported");
+    }
     this.connection = connection;
     this.compactDb = compactDb;
+    this.hashAsTileId = hashAsTileId;
   }
 
   /** Returns a new mbtiles file that won't get written to disk. Useful for toy use-cases like unit tests. */
-  public static Mbtiles newInMemoryDatabase(boolean compactDb) {
+  public static Mbtiles newInMemoryDatabase(boolean compactDb, boolean hashAsTileId) {
     try {
       SQLiteConfig config = new SQLiteConfig();
       config.setApplicationId(MBTILES_APPLICATION_ID);
-      return new Mbtiles(DriverManager.getConnection("jdbc:sqlite::memory:", config.toProperties()), compactDb);
+      return new Mbtiles(DriverManager.getConnection("jdbc:sqlite::memory:", config.toProperties()), compactDb,
+        hashAsTileId);
     } catch (SQLException throwables) {
       throw new IllegalStateException("Unable to create in-memory database", throwables);
     }
   }
 
-  /** @see {@link #newInMemoryDatabase(boolean)} */
+  /** @see {@link #newInMemoryDatabase(boolean, boolean)} */
   public static Mbtiles newInMemoryDatabase() {
-    return newInMemoryDatabase(true);
+    return newInMemoryDatabase(true, false);
   }
 
   /** Returns a new connection to an mbtiles file optimized for fast bulk writes. */
-  public static Mbtiles newWriteToFileDatabase(Path path, boolean compactDb) {
+  public static Mbtiles newWriteToFileDatabase(Path path, boolean compactDb, boolean hashAsTileId) {
     try {
       SQLiteConfig config = new SQLiteConfig();
       config.setJournalMode(SQLiteConfig.JournalMode.OFF);
@@ -121,7 +128,7 @@ public final class Mbtiles implements Closeable {
       config.setTempStore(SQLiteConfig.TempStore.MEMORY);
       config.setApplicationId(MBTILES_APPLICATION_ID);
       return new Mbtiles(DriverManager.getConnection("jdbc:sqlite:" + path.toAbsolutePath(), config.toProperties()),
-        compactDb);
+        compactDb, hashAsTileId);
     } catch (SQLException throwables) {
       throw new IllegalArgumentException("Unable to open " + path, throwables);
     }
@@ -139,7 +146,8 @@ public final class Mbtiles implements Closeable {
       // config.setOpenMode(SQLiteOpenMode.NOMUTEX);
       Connection connection = DriverManager
         .getConnection("jdbc:sqlite:" + path.toAbsolutePath(), config.toProperties());
-      return new Mbtiles(connection, false /* in read-only mode, it's irrelevant if compact or not */);
+      return new Mbtiles(connection, false /* in read-only mode, it's irrelevant if compact or not */,
+        false /* similarly irrelevant regarding hash as ID */);
     } catch (SQLException throwables) {
       throw new IllegalArgumentException("Unable to open " + path, throwables);
     }
@@ -282,7 +290,9 @@ public final class Mbtiles implements Closeable {
 
   /** Returns a writer that queues up inserts into the tile database(s) into large batches before executing them. */
   public BatchedTileWriter newBatchedTileWriter() {
-    if (compactDb) {
+    if (compactDb && hashAsTileId) {
+      return new BatchedCompactHashAsIdTileWriter();
+    } else if (compactDb) {
       return new BatchedCompactTileWriter();
     } else {
       return new BatchedNonCompactTileWriter();
@@ -470,10 +480,10 @@ public final class Mbtiles implements Closeable {
   }
 
   /** Contents of a row of the tiles_shallow table. */
-  private record TileShallowEntry(TileCoord coord, int tileDataId) {}
+  private record TileShallowEntry(TileCoord coord, long tileDataId) {}
 
   /** Contents of a row of the tiles_data table. */
-  private record TileDataEntry(int tileDataId, byte[] tileData) {
+  private record TileDataEntry(long tileDataId, byte[] tileData) {
     @Override
     public String toString() {
       return "TileDataEntry [tileDataId=" + tileDataId + ", tileData=" + Arrays.toString(tileData) + "]";
@@ -634,7 +644,7 @@ public final class Mbtiles implements Closeable {
       statement.setInt(positionOffset++, x);
       // flip Y
       statement.setInt(positionOffset++, (1 << z) - 1 - y);
-      statement.setInt(positionOffset++, item.tileDataId());
+      statement.setLong(positionOffset++, item.tileDataId());
 
       return positionOffset;
     }
@@ -652,7 +662,7 @@ public final class Mbtiles implements Closeable {
     protected int setParamsInStatementForItem(int positionOffset, PreparedStatement statement, TileDataEntry item)
       throws SQLException {
 
-      statement.setInt(positionOffset++, item.tileDataId());
+      statement.setLong(positionOffset++, item.tileDataId());
       statement.setBytes(positionOffset++, item.tileData());
 
       return positionOffset;
@@ -720,6 +730,50 @@ public final class Mbtiles implements Closeable {
         batchedTileDataTableWriter.write(new TileDataEntry(tileDataId, encodingResult.tileData()));
       }
       batchedTileShallowTableWriter.write(new TileShallowEntry(encodingResult.coord(), tileDataId));
+    }
+
+    @Override
+    public void close() {
+      batchedTileShallowTableWriter.close();
+      batchedTileDataTableWriter.close();
+    }
+
+    @Override
+    public void printStats() {
+      if (LOGGER.isDebugEnabled()) {
+        var format = Format.defaultInstance();
+        LOGGER.debug("Shallow tiles written: {}", format.integer(batchedTileShallowTableWriter.count()));
+        LOGGER.debug("Tile data written: {} ({} omitted)", format.integer(batchedTileDataTableWriter.count()),
+          format.percent(1d - batchedTileDataTableWriter.count() * 1d / batchedTileShallowTableWriter.count()));
+        LOGGER.debug("Unique tile hashes: {}", format.integer(tileDataIdByHash.size()));
+      }
+    }
+  }
+
+  private class BatchedCompactHashAsIdTileWriter implements BatchedTileWriter {
+
+    private final BatchedTileShallowTableWriter batchedTileShallowTableWriter = new BatchedTileShallowTableWriter();
+    private final BatchedTileDataTableWriter batchedTileDataTableWriter = new BatchedTileDataTableWriter();
+    private final LongLongHashMap tileDataIdByHash = new LongLongHashMap(100_000);
+
+
+    @Override
+    public void write(TileEncodingResult encodingResult) {
+      boolean writeData;
+      OptionalLong tileDataHashOpt = encodingResult.tileDataHash();
+      long tileDataHash;
+
+      tileDataHash = tileDataHashOpt.orElseThrow();
+      if (tileDataIdByHash.containsKey(tileDataHash)) {
+        writeData = false;
+      } else {
+        tileDataIdByHash.put(tileDataHash, tileDataHash);
+        writeData = true;
+      }
+      if (writeData) {
+        batchedTileDataTableWriter.write(new TileDataEntry(tileDataHash, encodingResult.tileData()));
+      }
+      batchedTileShallowTableWriter.write(new TileShallowEntry(encodingResult.coord(), tileDataHash));
     }
 
     @Override

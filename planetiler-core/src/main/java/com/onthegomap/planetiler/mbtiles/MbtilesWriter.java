@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAccumulator;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -62,6 +63,8 @@ public class MbtilesWriter {
   private final Iterable<FeatureGroup.TileFeatures> inputTiles;
   private final AtomicReference<TileCoord> lastTileWritten = new AtomicReference<>();
   private final MbtilesMetadata mbtilesMetadata;
+  private final boolean compactDb;
+  private final Function<VectorTile, Boolean> isHashCalculationNeeded;
 
   private MbtilesWriter(Iterable<FeatureGroup.TileFeatures> inputTiles, Mbtiles db, PlanetilerConfig config,
     MbtilesMetadata mbtilesMetadata, Stats stats, LayerStats layerStats) {
@@ -87,12 +90,18 @@ public class MbtilesWriter {
       countsByZoom.put(Integer.toString(zoom), tilesByZoom[zoom]);
     }
     stats.counter("mbtiles_tiles_written", "zoom", () -> countsByZoom);
+    this.compactDb = config.compactDb();
+    if (config.hashAsTileId()) {
+      this.isHashCalculationNeeded = en -> true;
+    } else {
+      this.isHashCalculationNeeded = en -> compactDb && en.likelyToBeDuplicated();
+    }
   }
 
   /** Reads all {@code features}, encodes them in parallel, and writes to {@code outputPath}. */
   public static void writeOutput(FeatureGroup features, Path outputPath, MbtilesMetadata mbtilesMetadata,
     PlanetilerConfig config, Stats stats) {
-    try (Mbtiles output = Mbtiles.newWriteToFileDatabase(outputPath, config.compactDb())) {
+    try (Mbtiles output = Mbtiles.newWriteToFileDatabase(outputPath, config.compactDb(), config.hashAsTileId())) {
       writeOutput(features, output, () -> FileUtils.fileSize(outputPath), mbtilesMetadata, config, stats);
     } catch (IOException e) {
       throw new IllegalStateException("Unable to write to " + outputPath, e);
@@ -256,7 +265,6 @@ public class MbtilesWriter {
     byte[] lastBytes = null, lastEncoded = null;
     Long lastTileDataHash = null;
     boolean lastIsFill = false;
-    boolean compactDb = config.compactDb();
     boolean skipFilled = config.skipFilledTiles();
 
     for (TileBatch batch : prev) {
@@ -290,7 +298,7 @@ public class MbtilesWriter {
           lastEncoded = encoded;
           lastBytes = bytes;
           last = tileFeatures;
-          if (compactDb && en.likelyToBeDuplicated() && bytes != null) {
+          if (isHashCalculationNeeded.apply(en) && bytes != null) {
             tileDataHash = generateContentHash(bytes);
           } else {
             tileDataHash = null;

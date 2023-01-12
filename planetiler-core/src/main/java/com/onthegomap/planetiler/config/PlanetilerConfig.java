@@ -48,7 +48,8 @@ public record PlanetilerConfig(
   boolean osmLazyReads,
   boolean compactDb,
   boolean skipFilledTiles,
-  int tileWarningSizeBytes
+  int tileWarningSizeBytes,
+  boolean hashAsTileId
 ) {
 
   public static final int MIN_MINZOOM = 0;
@@ -67,6 +68,9 @@ public record PlanetilerConfig(
     }
     if (httpRetries < 0) {
       throw new IllegalArgumentException("HTTP Retries must be >= 0, was " + httpRetries);
+    }
+    if (hashAsTileId && !compactDb) {
+      throw new IllegalArgumentException("compactDb=false with hashAsTileId=true is NOT supported");
     }
   }
 
@@ -173,7 +177,10 @@ public record PlanetilerConfig(
         false),
       (int) (arguments.getDouble("tile_warning_size_mb",
         "Maximum size in megabytes of a tile to emit a warning about",
-        1d) * 1024 * 1024)
+        1d) * 1024 * 1024),
+      arguments.getBoolean("hash_as_tile_id",
+        "Use hash of encoded tile as tile_id",
+        false)
     );
   }
 
