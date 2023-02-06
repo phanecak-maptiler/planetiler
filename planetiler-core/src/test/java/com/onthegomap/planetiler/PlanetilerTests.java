@@ -3,6 +3,8 @@ package com.onthegomap.planetiler;
 import static com.onthegomap.planetiler.TestUtils.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.onthegomap.planetiler.archive.TileArchiveMetadata;
+import com.onthegomap.planetiler.archive.TileArchiveWriter;
 import com.onthegomap.planetiler.collection.FeatureGroup;
 import com.onthegomap.planetiler.collection.LongLongMap;
 import com.onthegomap.planetiler.collection.LongLongMultimap;
@@ -11,6 +13,7 @@ import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
 import com.onthegomap.planetiler.geo.TileCoord;
+import com.onthegomap.planetiler.geo.TileOrder;
 import com.onthegomap.planetiler.mbtiles.Mbtiles;
 import com.onthegomap.planetiler.reader.SimpleFeature;
 import com.onthegomap.planetiler.reader.SimpleReader;
@@ -22,8 +25,6 @@ import com.onthegomap.planetiler.reader.osm.OsmReader;
 import com.onthegomap.planetiler.reader.osm.OsmRelationInfo;
 import com.onthegomap.planetiler.stats.Stats;
 import com.onthegomap.planetiler.util.BuildInfo;
-import com.onthegomap.planetiler.writer.TileArchiveMetadata;
-import com.onthegomap.planetiler.writer.TileArchiveWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -137,7 +138,7 @@ class PlanetilerTests {
     Profile profile
   ) throws Exception {
     PlanetilerConfig config = PlanetilerConfig.from(Arguments.of(args));
-    FeatureGroup featureGroup = FeatureGroup.newInMemoryFeatureGroup(profile, stats);
+    FeatureGroup featureGroup = FeatureGroup.newInMemoryFeatureGroup(TileOrder.TMS, profile, stats);
     runner.run(featureGroup, profile, config);
     featureGroup.prepare();
     try (Mbtiles db = Mbtiles.newInMemoryDatabase(config.compactDb())) {
@@ -1668,7 +1669,7 @@ class PlanetilerTests {
       .addOsmSource("osm", tempOsm)
       .addNaturalEarthSource("ne", TestUtils.pathToResource("natural_earth_vector.sqlite"))
       .addShapefileSource("shapefile", TestUtils.pathToResource("shapefile.zip"))
-      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg.zip"), null)
       .setOutput("mbtiles", mbtiles)
       .run();
 
@@ -1749,9 +1750,11 @@ class PlanetilerTests {
   @ValueSource(strings = {
     "",
     "--write-threads=2 --process-threads=2 --feature-read-threads=2 --threads=4",
+    "--input-file=geopackage.gpkg"
   })
   void testPlanetilerRunnerGeoPackage(String args) throws Exception {
     Path mbtiles = tempDir.resolve("output.mbtiles");
+    String inputFile = Arguments.fromArgs(args).getString("input-file", "", "geopackage.gpkg.zip");
 
     Planetiler.create(Arguments.fromArgs((args + " --tmpdir=" + tempDir.resolve("data")).split("\\s+")))
       .setProfile(new Profile.NullProfile() {
@@ -1762,7 +1765,7 @@ class PlanetilerTests {
             .setAttr("name", source.getString("name"));
         }
       })
-      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource(inputFile), null)
       .setOutput("mbtiles", mbtiles)
       .run();
 
@@ -1790,7 +1793,7 @@ class PlanetilerTests {
       .addOsmSource("osm", TestUtils.pathToResource("monaco-latest.osm.pbf"))
       .addNaturalEarthSource("ne", TestUtils.pathToResource("natural_earth_vector.sqlite"))
       .addShapefileSource("shapefile", TestUtils.pathToResource("shapefile.zip"))
-      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg"), null)
+      .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg.zip"), null)
       .setOutput("mbtiles", tempDir.resolve("output.mbtiles"))
       .run();
   }

@@ -7,14 +7,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.onthegomap.planetiler.archive.ReadableTileArchive;
+import com.onthegomap.planetiler.archive.TileArchiveMetadata;
+import com.onthegomap.planetiler.archive.TileEncodingResult;
+import com.onthegomap.planetiler.archive.WriteableTileArchive;
 import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.TileCoord;
+import com.onthegomap.planetiler.geo.TileOrder;
+import com.onthegomap.planetiler.reader.FileFormatException;
+import com.onthegomap.planetiler.util.CloseableIterator;
 import com.onthegomap.planetiler.util.Format;
 import com.onthegomap.planetiler.util.LayerStats;
-import com.onthegomap.planetiler.writer.TileArchive;
-import com.onthegomap.planetiler.writer.TileArchiveMetadata;
-import com.onthegomap.planetiler.writer.TileEncodingResult;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -27,13 +31,11 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -50,7 +52,7 @@ import org.sqlite.SQLiteConfig;
  *
  * @see <a href="https://github.com/mapbox/mbtiles-spec/blob/master/1.3/spec.md">MBTiles Specification</a>
  */
-public final class Mbtiles implements TileArchive {
+public final class Mbtiles implements WriteableTileArchive, ReadableTileArchive {
 
   // https://www.sqlite.org/src/artifact?ci=trunk&filename=magic.txt
   private static final int MBTILES_APPLICATION_ID = 0x4d504258;
@@ -90,8 +92,8 @@ public final class Mbtiles implements TileArchive {
   }
 
   private final Connection connection;
-  private PreparedStatement getTileStatement = null;
   private final boolean compactDb;
+  private PreparedStatement getTileStatement = null;
 
   private Mbtiles(Connection connection, boolean compactDb) {
     this.connection = connection;
@@ -150,6 +152,11 @@ public final class Mbtiles implements TileArchive {
   }
 
   @Override
+  public TileOrder tileOrder() {
+    return TileOrder.TMS;
+  }
+
+  @Override
   public void initialize(PlanetilerConfig config, TileArchiveMetadata tileArchiveMetadata, LayerStats layerStats) {
     if (config.skipIndexCreation()) {
       createTablesWithoutIndexes();
@@ -171,7 +178,7 @@ public final class Mbtiles implements TileArchive {
       .setBoundsAndCenter(config.bounds().latLon())
       .setMinzoom(config.minzoom())
       .setMaxzoom(config.maxzoom())
-      .setJson(layerStats.getTileStats());
+      .setJson(new MetadataJson(layerStats.getTileStats()));
 
     for (var entry : tileArchiveMetadata.planetilerSpecific().entrySet()) {
       metadata.setMetadata(entry.getKey(), entry.getValue());
@@ -321,7 +328,7 @@ public final class Mbtiles implements TileArchive {
   }
 
   /** Returns a writer that queues up inserts into the tile database(s) into large batches before executing them. */
-  public TileArchive.TileWriter newTileWriter() {
+  public WriteableTileArchive.TileWriter newTileWriter() {
     if (compactDb) {
       return new BatchedCompactTileWriter();
     } else {
@@ -330,7 +337,7 @@ public final class Mbtiles implements TileArchive {
   }
 
   // TODO: exists for compatibility purposes
-  public TileArchive.TileWriter newBatchedTileWriter() {
+  public WriteableTileArchive.TileWriter newBatchedTileWriter() {
     return newTileWriter();
   }
 
@@ -353,10 +360,7 @@ public final class Mbtiles implements TileArchive {
     return getTileStatement;
   }
 
-  public byte[] getTile(TileCoord coord) {
-    return getTile(coord.x(), coord.y(), coord.z());
-  }
-
+  @Override
   public byte[] getTile(int x, int y, int z) {
     try {
       PreparedStatement stmt = getTileStatement();
@@ -371,22 +375,9 @@ public final class Mbtiles implements TileArchive {
     }
   }
 
-  public List<TileCoord> getAllTileCoords() {
-    List<TileCoord> result = new ArrayList<>();
-    try (Statement statement = connection.createStatement()) {
-      ResultSet rs = statement.executeQuery(
-        "select %s, %s, %s, %s from %s".formatted(TILES_COL_Z, TILES_COL_X, TILES_COL_Y, TILES_COL_DATA, TILES_TABLE)
-      );
-      while (rs.next()) {
-        int z = rs.getInt(TILES_COL_Z);
-        int rawy = rs.getInt(TILES_COL_Y);
-        int x = rs.getInt(TILES_COL_X);
-        result.add(TileCoord.ofXYZ(x, (1 << z) - 1 - rawy, z));
-      }
-    } catch (SQLException throwables) {
-      throw new IllegalStateException("Could not get all tile coordinates", throwables);
-    }
-    return result;
+  @Override
+  public CloseableIterator<TileCoord> getAllTileCoords() {
+    return new TileCoordIterator();
   }
 
   public Connection connection() {
@@ -400,10 +391,10 @@ public final class Mbtiles implements TileArchive {
    *      schema</a>
    */
   public record MetadataJson(
-    @JsonProperty("vector_layers") List<VectorLayer> vectorLayers
+    @JsonProperty("vector_layers") List<LayerStats.VectorLayer> vectorLayers
   ) {
 
-    public MetadataJson(VectorLayer... layers) {
+    public MetadataJson(LayerStats.VectorLayer... layers) {
       this(List.of(layers));
     }
 
@@ -420,55 +411,6 @@ public final class Mbtiles implements TileArchive {
         return objectMapper.writeValueAsString(this);
       } catch (JsonProcessingException e) {
         throw new IllegalArgumentException("Unable to encode as string: " + this, e);
-      }
-    }
-
-    public enum FieldType {
-      @JsonProperty("Number")
-      NUMBER,
-      @JsonProperty("Boolean")
-      BOOLEAN,
-      @JsonProperty("String")
-      STRING;
-
-      /**
-       * Per the spec: attributes whose type varies between features SHOULD be listed as "String"
-       */
-      public static FieldType merge(FieldType oldValue, FieldType newValue) {
-        return oldValue != newValue ? STRING : newValue;
-      }
-    }
-
-    public record VectorLayer(
-      @JsonProperty("id") String id,
-      @JsonProperty("fields") Map<String, FieldType> fields,
-      @JsonProperty("description") Optional<String> description,
-      @JsonProperty("minzoom") OptionalInt minzoom,
-      @JsonProperty("maxzoom") OptionalInt maxzoom
-    ) {
-
-      public VectorLayer(String id, Map<String, FieldType> fields) {
-        this(id, fields, Optional.empty(), OptionalInt.empty(), OptionalInt.empty());
-      }
-
-      public VectorLayer(String id, Map<String, FieldType> fields, int minzoom, int maxzoom) {
-        this(id, fields, Optional.empty(), OptionalInt.of(minzoom), OptionalInt.of(maxzoom));
-      }
-
-      public static VectorLayer forLayer(String id) {
-        return new VectorLayer(id, new HashMap<>());
-      }
-
-      public VectorLayer withDescription(String newDescription) {
-        return new VectorLayer(id, fields, Optional.of(newDescription), minzoom, maxzoom);
-      }
-
-      public VectorLayer withMinzoom(int newMinzoom) {
-        return new VectorLayer(id, fields, description, OptionalInt.of(newMinzoom), maxzoom);
-      }
-
-      public VectorLayer withMaxzoom(int newMaxzoom) {
-        return new VectorLayer(id, fields, description, minzoom, OptionalInt.of(newMaxzoom));
       }
     }
   }
@@ -538,11 +480,67 @@ public final class Mbtiles implements TileArchive {
       if (this == obj) {
         return true;
       }
-      if (!(obj instanceof TileDataEntry)) {
+      if (!(obj instanceof TileDataEntry other)) {
         return false;
       }
-      TileDataEntry other = (TileDataEntry) obj;
       return Arrays.equals(tileData, other.tileData) && tileDataId == other.tileDataId;
+    }
+  }
+
+  /** Iterates through tile coordinates one at a time without materializing the entire list in memory. */
+  private class TileCoordIterator implements CloseableIterator<TileCoord> {
+    private final Statement statement;
+    private final ResultSet rs;
+    private boolean hasNext = false;
+
+    private TileCoordIterator() {
+      try {
+        this.statement = connection.createStatement();
+        this.rs = statement.executeQuery(
+          "select %s, %s, %s, %s from %s".formatted(TILES_COL_Z, TILES_COL_X, TILES_COL_Y, TILES_COL_DATA, TILES_TABLE)
+        );
+        hasNext = rs.next();
+      } catch (SQLException e) {
+        throw new FileFormatException("Could not read tile coordinates from mbtiles file", e);
+      } finally {
+        if (!hasNext) {
+          close();
+        }
+      }
+    }
+
+    @Override
+    public void close() {
+      try {
+        statement.close();
+      } catch (SQLException e) {
+        throw new IllegalStateException("Could not close mbtiles file", e);
+      }
+    }
+
+    @Override
+    public boolean hasNext() {
+      return hasNext;
+    }
+
+    @Override
+    public TileCoord next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      try {
+        int z = rs.getInt(TILES_COL_Z);
+        int rawy = rs.getInt(TILES_COL_Y);
+        int x = rs.getInt(TILES_COL_X);
+        var result = TileCoord.ofXYZ(x, (1 << z) - 1 - rawy, z);
+        hasNext = rs.next();
+        if (!hasNext) {
+          close();
+        }
+        return result;
+      } catch (SQLException e) {
+        throw new IllegalStateException("Could not read mbtiles file", e);
+      }
     }
   }
 
@@ -713,12 +711,6 @@ public final class Mbtiles implements TileArchive {
       tableWriter.write(new TileEntry(encodingResult.coord(), encodingResult.tileData()));
     }
 
-    // TODO: exists for compatibility purposes
-    @Override
-    public void write(com.onthegomap.planetiler.mbtiles.TileEncodingResult encodingResult) {
-      tableWriter.write(new TileEntry(encodingResult.coord(), encodingResult.tileData()));
-    }
-
     @Override
     public void close() {
       tableWriter.close();
@@ -758,12 +750,6 @@ public final class Mbtiles implements TileArchive {
         batchedTileDataTableWriter.write(new TileDataEntry(tileDataId, encodingResult.tileData()));
       }
       batchedTileShallowTableWriter.write(new TileShallowEntry(encodingResult.coord(), tileDataId));
-    }
-
-    // TODO: exists for compatibility purposes
-    @Override
-    public void write(com.onthegomap.planetiler.mbtiles.TileEncodingResult encodingResult) {
-      write(new TileEncodingResult(encodingResult.coord(), encodingResult.tileData(), encodingResult.tileDataHash()));
     }
 
     @Override

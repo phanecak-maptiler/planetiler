@@ -5,14 +5,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.common.math.IntMath;
 import com.onthegomap.planetiler.TestUtils;
+import com.onthegomap.planetiler.archive.TileEncodingResult;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.TileCoord;
-import com.onthegomap.planetiler.writer.TileEncodingResult;
+import com.onthegomap.planetiler.util.LayerStats;
 import java.io.IOException;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -68,7 +68,7 @@ class MbtilesTest {
       assertEquals(howMany, all.size());
       assertEquals(expected, all);
       assertEquals(expected.stream().map(Mbtiles.TileEntry::tile).collect(Collectors.toSet()),
-        new HashSet<>(db.getAllTileCoords()));
+        db.getAllTileCoords().stream().collect(Collectors.toSet()));
       for (var expectedEntry : expected) {
         var tile = expectedEntry.tile();
         byte[] data = db.getTile(tile.x(), tile.y(), tile.z());
@@ -204,17 +204,17 @@ class MbtilesTest {
   @Test
   void testFullMetadataJson() throws IOException {
     testMetadataJson(new Mbtiles.MetadataJson(
-      new Mbtiles.MetadataJson.VectorLayer(
+      new LayerStats.VectorLayer(
         "full",
         Map.of(
-          "NUMBER_FIELD", Mbtiles.MetadataJson.FieldType.NUMBER,
-          "STRING_FIELD", Mbtiles.MetadataJson.FieldType.STRING,
-          "boolean field", Mbtiles.MetadataJson.FieldType.BOOLEAN
+          "NUMBER_FIELD", LayerStats.FieldType.NUMBER,
+          "STRING_FIELD", LayerStats.FieldType.STRING,
+          "boolean field", LayerStats.FieldType.BOOLEAN
         )
       ).withDescription("full description")
         .withMinzoom(0)
         .withMaxzoom(5),
-      new Mbtiles.MetadataJson.VectorLayer(
+      new LayerStats.VectorLayer(
         "partial",
         Map.of()
       )
