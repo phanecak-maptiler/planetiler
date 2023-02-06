@@ -1,5 +1,8 @@
 package com.onthegomap.planetiler;
 
+import com.onthegomap.planetiler.archive.TileArchiveMetadata;
+import com.onthegomap.planetiler.archive.TileArchiveWriter;
+import com.onthegomap.planetiler.archive.WriteableTileArchive;
 import com.onthegomap.planetiler.collection.FeatureGroup;
 import com.onthegomap.planetiler.collection.LongLongMap;
 import com.onthegomap.planetiler.collection.LongLongMultimap;
@@ -26,9 +29,6 @@ import com.onthegomap.planetiler.util.ResourceUsage;
 import com.onthegomap.planetiler.util.Translations;
 import com.onthegomap.planetiler.util.Wikidata;
 import com.onthegomap.planetiler.worker.RunnableThatThrows;
-import com.onthegomap.planetiler.writer.TileArchive;
-import com.onthegomap.planetiler.writer.TileArchiveMetadata;
-import com.onthegomap.planetiler.writer.TileArchiveWriter;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
@@ -658,28 +658,29 @@ public class Planetiler {
       bounds.addFallbackProvider(new OsmNodeBoundsProvider(osmInputFile, config, stats));
     }
 
-    featureGroup = FeatureGroup.newDiskBackedFeatureGroup(featureDbPath, profile, config, stats);
-    stats.monitorFile("nodes", nodeDbPath);
-    stats.monitorFile("features", featureDbPath);
-    stats.monitorFile("multipolygons", multipolygonPath);
-    stats.monitorFile("archive", output);
+    try (WriteableTileArchive archive = Mbtiles.newWriteToFileDatabase(output, config.compactDb())) {
+      featureGroup =
+        FeatureGroup.newDiskBackedFeatureGroup(archive.tileOrder(), featureDbPath, profile, config, stats);
+      stats.monitorFile("nodes", nodeDbPath);
+      stats.monitorFile("features", featureDbPath);
+      stats.monitorFile("multipolygons", multipolygonPath);
+      stats.monitorFile("archive", output);
 
-    for (Stage stage : stages) {
-      stage.task.run();
-    }
-
-    LOGGER.info("Deleting node.db to make room for output file");
-    profile.release();
-    for (var inputPath : inputPaths) {
-      if (inputPath.freeAfterReading()) {
-        LOGGER.info("Deleting {} ({}) to make room for output file", inputPath.id, inputPath.path);
-        FileUtils.delete(inputPath.path());
+      for (Stage stage : stages) {
+        stage.task.run();
       }
-    }
 
-    featureGroup.prepare();
+      LOGGER.info("Deleting node.db to make room for output file");
+      profile.release();
+      for (var inputPath : inputPaths) {
+        if (inputPath.freeAfterReading()) {
+          LOGGER.info("Deleting {} ({}) to make room for output file", inputPath.id, inputPath.path);
+          FileUtils.delete(inputPath.path());
+        }
+      }
 
-    try (TileArchive archive = Mbtiles.newWriteToFileDatabase(output, config.compactDb())) {
+      featureGroup.prepare();
+
       TileArchiveWriter.writeOutput(featureGroup, archive, () -> FileUtils.fileSize(output), tileArchiveMetadata,
         config,
         stats);
