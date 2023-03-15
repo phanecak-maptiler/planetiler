@@ -107,7 +107,8 @@ class OsmMultipolygonTest {
     return new Node(id++, x, y);
   }
 
-  private void testBuildMultipolygon(List<List<Node>> ways, Geometry expected) throws GeometryException {
+  private void testBuildMultipolygon(List<List<Node>> ways, Geometry expected, boolean withOrdering)
+    throws GeometryException {
     Map<Long, Coordinate> coords = new HashMap<>();
     List<LongArrayList> rings = new ArrayList<>();
     for (List<Node> way : ways) {
@@ -121,6 +122,13 @@ class OsmMultipolygonTest {
     OsmReader.NodeLocationProvider nodeLocs = coords::get;
     Geometry actual = OsmMultipolygon.build(rings, nodeLocs, 0);
     assertSameNormalizedFeature(expected, actual);
+    if (withOrdering) {
+      assertEquals(expected.toString(), actual.toString());
+    }
+  }
+
+  private void testBuildMultipolygon(List<List<Node>> ways, Geometry expected) throws GeometryException {
+    testBuildMultipolygon(ways, expected, false);
   }
 
   @Test
@@ -223,6 +231,21 @@ class OsmMultipolygonTest {
   }
 
   @Test
+  void testSimpleMutltipolygonOrdering() throws GeometryException {
+    testBuildMultipolygon(
+      List.of(
+        rectangleNodes(8, 10),
+        rectangleNodes(0, 7)
+      ),
+      newMultiPolygon(
+        rectangle(0, 7),
+        rectangle(8, 10)
+      ),
+      true
+    );
+  }
+
+  @Test
   void testSimplePolygonWithMultipleHoles() throws GeometryException {
     testBuildMultipolygon(
       List.of(
@@ -234,6 +257,23 @@ class OsmMultipolygonTest {
         rectangleCoordList(0, 10),
         List.of(rectangleCoordList(1, 2), rectangleCoordList(3, 4))
       )
+    );
+  }
+
+  @Test
+  void testSimplePolygonWithMultipleHolesOrdering() throws GeometryException {
+    testBuildMultipolygon(
+      List.of(
+        rectangleNodes(0, 10),
+        rectangleNodes(3, 5),
+        rectangleNodes(1, 2),
+        rectangleNodes(6, 9)
+      ),
+      newPolygon(
+        rectangleCoordList(0, 10),
+        List.of(rectangleCoordList(6, 9), rectangleCoordList(3, 5), rectangleCoordList(1, 2))
+      ),
+      true
     );
   }
 

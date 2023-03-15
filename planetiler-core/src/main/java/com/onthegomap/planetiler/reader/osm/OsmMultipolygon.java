@@ -72,7 +72,7 @@ public class OsmMultipolygon {
     public Polygon toPolygon() {
       return GeoUtils.JTS_FACTORY.createPolygon(
         geom.getExteriorRing(),
-        holes.stream().map(ring -> ring.geom.getExteriorRing()).toArray(LinearRing[]::new)
+        holes.stream().sorted(BY_AREA_DESCENDING).map(ring -> ring.geom.getExteriorRing()).toArray(LinearRing[]::new)
       );
     }
 
@@ -182,6 +182,7 @@ public class OsmMultipolygon {
         return shells.iterator().next().toPolygon();
       } else {
         Polygon[] finished = shells.stream()
+          .sorted(BY_AREA_DESCENDING)
           .map(Ring::toPolygon)
           .toArray(Polygon[]::new);
         return GeoUtils.JTS_FACTORY.createMultiPolygon(finished);
