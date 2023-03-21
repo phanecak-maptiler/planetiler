@@ -24,8 +24,6 @@ public record PlanetilerConfig(
   int minzoom,
   int maxzoom,
   int maxzoomForRendering,
-  boolean skipIndexCreation,
-  boolean optimizeDb,
   boolean force,
   boolean gzipTempStorage,
   boolean mmapTempStorage,
@@ -47,10 +45,10 @@ public record PlanetilerConfig(
   double simplifyToleranceAtMaxZoom,
   double simplifyToleranceBelowMaxZoom,
   boolean osmLazyReads,
-  boolean compactDb,
   boolean skipFilledTiles,
   int tileWarningSizeBytes,
-  Boolean color
+  Boolean color,
+  boolean keepUnzippedSources
 ) {
 
   public static final int MIN_MINZOOM = 0;
@@ -125,8 +123,6 @@ public record PlanetilerConfig(
       minzoom,
       maxzoom,
       renderMaxzoom,
-      arguments.getBoolean("skip_mbtiles_index_creation", "skip adding index to mbtiles file", false),
-      arguments.getBoolean("optimize_db", "Vacuum analyze mbtiles after writing", false),
       arguments.getBoolean("force", "overwriting output file and ignore disk/RAM warnings", false),
       arguments.getBoolean("gzip_temp", "gzip temporary feature storage (uses more CPU, but less disk space)", false),
       arguments.getBoolean("mmap_temp", "use memory-mapped IO for temp feature files", true),
@@ -168,16 +164,15 @@ public record PlanetilerConfig(
       arguments.getBoolean("osm_lazy_reads",
         "Read OSM blocks from disk in worker threads",
         true),
-      arguments.getBoolean("compact_db",
-        "Reduce the DB size by separating and deduping the tile data",
-        true),
       arguments.getBoolean("skip_filled_tiles",
         "Skip writing tiles containing only polygon fills to the output",
         false),
       (int) (arguments.getDouble("tile_warning_size_mb",
         "Maximum size in megabytes of a tile to emit a warning about",
         1d) * 1024 * 1024),
-      arguments.getBooleanObject("color", "Color the terminal output")
+      arguments.getBooleanObject("color", "Color the terminal output"),
+      arguments.getBoolean("keep_unzipped",
+        "keep unzipped sources by default after reading", false)
     );
   }
 
