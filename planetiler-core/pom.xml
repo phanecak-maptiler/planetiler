@@ -16,10 +16,10 @@
   </parent>
 
   <properties>
-    <geotools.version>29.0</geotools.version>
+    <geotools.version>29.1</geotools.version>
     <log4j.version>2.20.0</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
-    <protobuf.version>3.23.0</protobuf.version>
+    <protobuf.version>3.23.1</protobuf.version>
     <geopackage.version>6.6.1</geopackage.version>
   </properties>
 
@@ -62,7 +62,7 @@
     <dependency>
       <groupId>org.xerial</groupId>
       <artifactId>sqlite-jdbc</artifactId>
-      <version>3.41.2.1</version>
+      <version>3.41.2.2</version>
     </dependency>
     <dependency>
       <groupId>org.msgpack</groupId>
