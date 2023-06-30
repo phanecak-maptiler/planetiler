@@ -19,7 +19,7 @@
     <geotools.version>29.1</geotools.version>
     <log4j.version>2.20.0</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
-    <protobuf.version>3.23.1</protobuf.version>
+    <protobuf.version>3.23.2</protobuf.version>
     <geopackage.version>6.6.1</geopackage.version>
   </properties>
 
@@ -32,7 +32,7 @@
     <dependency>
       <groupId>org.roaringbitmap</groupId>
       <artifactId>RoaringBitmap</artifactId>
-      <version>0.9.44</version>
+      <version>0.9.45</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
@@ -132,12 +132,12 @@
     <dependency>
       <groupId>com.ibm.icu</groupId>
       <artifactId>icu4j</artifactId>
-      <version>73.1</version>
+      <version>73.2</version>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>32.0.0-jre</version>
+      <version>32.1.0-jre</version>
     </dependency>
     <dependency>
       <groupId>mil.nga.geopackage</groupId>
