@@ -38,7 +38,6 @@ import org.slf4j.LoggerFactory;
  * profile (like zoom range, min pixel size, output attributes and their zoom ranges).
  */
 public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Closeable {
-
   private static final Logger LOGGER = LoggerFactory.getLogger(FeatureRenderer.class);
   private static final VectorTile.VectorGeometry FILL = VectorTile.encodeGeometry(GeoUtils.JTS_FACTORY
     .createPolygon(GeoUtils.JTS_FACTORY.createLinearRing(new PackedCoordinateSequence.Double(new double[]{

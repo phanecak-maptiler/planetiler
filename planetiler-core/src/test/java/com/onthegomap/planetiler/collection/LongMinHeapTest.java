@@ -29,6 +29,8 @@ import com.carrotsearch.hppc.IntSet;
 import java.util.PriorityQueue;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 
 /**
@@ -37,60 +39,77 @@ import org.junit.jupiter.api.Test;
  * and modified to use long instead of float values, use stable random seed for reproducibility, and to use new
  * implementations.
  */
-class ArraySortableFeatureMinHeapTest {
+class LongMinHeapTest {
 
-  protected SortableFeatureMinHeap heap;
+  protected LongMinHeap heap;
 
   void create(int capacity) {
-    heap = SortableFeatureMinHeap.newArrayHeap(capacity);
-  }
-
-  private SortableFeature newEntry(long i) {
-    return new SortableFeature(i, new byte[]{(byte) i, (byte) (1 + i)});
-  }
-
-  private SortableFeature newEntry(long i, byte[] v) {
-    return new SortableFeature(i, v);
+    heap = LongMinHeap.newArrayHeap(capacity, Integer::compare);
   }
 
   @Test
   void outOfRange() {
     create(4);
-    assertThrows(IllegalArgumentException.class, () -> heap.push(4, newEntry(12L)));
-    assertThrows(IllegalArgumentException.class, () -> heap.push(-1, newEntry(12L)));
+    assertThrows(IllegalArgumentException.class, () -> heap.push(4, 12L));
+    assertThrows(IllegalArgumentException.class, () -> heap.push(-1, 12L));
   }
 
   @Test
   void tooManyElements() {
     create(3);
-    heap.push(1, newEntry(1L));
-    heap.push(2, newEntry(1L));
-    heap.push(0, newEntry(1L));
+    heap.push(1, 1L);
+    heap.push(2, 1L);
+    heap.push(0, 1L);
     // pushing element 1 again is not allowed (but this is not checked explicitly). however pushing more elements
     // than 3 is already an error
-    assertThrows(IllegalStateException.class, () -> heap.push(1, newEntry(1L)));
-    assertThrows(IllegalStateException.class, () -> heap.push(2, newEntry(61L)));
+    assertThrows(IllegalStateException.class, () -> heap.push(1, 1L));
+    assertThrows(IllegalStateException.class, () -> heap.push(2, 61L));
   }
 
   @Test
   void duplicateElements() {
     create(5);
-    heap.push(1, newEntry(2L));
-    heap.push(0, newEntry(4L));
-    heap.push(2, newEntry(1L));
+    heap.push(1, 2L);
+    heap.push(0, 4L);
+    heap.push(2, 1L);
     assertEquals(2, heap.poll());
     // pushing 2 again is ok because it was polled before
-    heap.push(2, newEntry(6L));
+    heap.push(2, 6L);
     // but now its not ok to push it again
-    assertThrows(IllegalStateException.class, () -> heap.push(2, newEntry(4L)));
+    assertThrows(IllegalStateException.class, () -> heap.push(2, 4L));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "0, 1, 2, 3, 4, 5",
+    "5, 4, 3, 2, 1, 0",
+    "0, 1, 2, 5, 4, 3",
+    "0, 1, 5, 2, 4, 3",
+    "0, 5, 1, 2, 4, 3",
+    "5, 0, 1, 2, 4, 3",
+  })
+  void tieBreaker(int a, int b, int c, int d, int e, int f) {
+    heap = LongMinHeap.newArrayHeap(6, (id1, id2) -> -Integer.compare(id1, id2));
+    heap.push(a, 0L);
+    heap.push(b, 0L);
+    heap.push(c, 0L);
+    heap.push(d, 0L);
+    heap.push(e, 0L);
+    heap.push(f, 0L);
+    assertEquals(5, heap.poll());
+    assertEquals(4, heap.poll());
+    assertEquals(3, heap.poll());
+    assertEquals(2, heap.poll());
+    assertEquals(1, heap.poll());
+    assertEquals(0, heap.poll());
   }
 
   @Test
   void testContains() {
     create(4);
-    heap.push(1, newEntry(1L));
-    heap.push(2, newEntry(7L));
-    heap.push(0, newEntry(5L));
+    heap.push(1, 1L);
+    heap.push(2, 7L);
+    heap.push(0, 5L);
     assertFalse(heap.contains(3));
     assertTrue(heap.contains(1));
     assertEquals(1, heap.poll());
@@ -100,8 +119,8 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void containsAfterClear() {
     create(4);
-    heap.push(1, newEntry(1L));
-    heap.push(2, newEntry(1L));
+    heap.push(1, 1L);
+    heap.push(2, 1L);
     assertEquals(2, heap.size());
     heap.clear();
     assertFalse(heap.contains(0));
@@ -115,9 +134,9 @@ class ArraySortableFeatureMinHeapTest {
     create(10);
     assertEquals(0, heap.size());
     assertTrue(heap.isEmpty());
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(23L));
-    heap.push(3, newEntry(23L));
+    heap.push(9, 36L);
+    heap.push(5, 23L);
+    heap.push(3, 23L);
     assertEquals(3, heap.size());
     assertFalse(heap.isEmpty());
   }
@@ -126,17 +145,17 @@ class ArraySortableFeatureMinHeapTest {
   void testClear() {
     create(5);
     assertTrue(heap.isEmpty());
-    heap.push(3, newEntry(12L));
-    heap.push(4, newEntry(3L));
+    heap.push(3, 12L);
+    heap.push(4, 3L);
     assertEquals(2, heap.size());
     heap.clear();
     assertTrue(heap.isEmpty());
 
-    heap.push(4, newEntry(63L));
-    heap.push(1, newEntry(21L));
+    heap.push(4, 63L);
+    heap.push(1, 21L);
     assertEquals(2, heap.size());
     assertEquals(1, heap.peekId());
-    assertEquals(newEntry(21L), heap.peekValue());
+    assertEquals(21L, heap.peekValue());
     assertEquals(1, heap.poll());
     assertEquals(4, heap.poll());
     assertTrue(heap.isEmpty());
@@ -146,11 +165,11 @@ class ArraySortableFeatureMinHeapTest {
   void testPush() {
     create(5);
 
-    heap.push(4, newEntry(63L));
-    heap.push(1, newEntry(21L));
+    heap.push(4, 63L);
+    heap.push(1, 21L);
     assertEquals(2, heap.size());
     assertEquals(1, heap.peekId());
-    assertEquals(newEntry(21L), heap.peekValue());
+    assertEquals(21L, heap.peekValue());
     assertEquals(1, heap.poll());
     assertEquals(4, heap.poll());
     assertTrue(heap.isEmpty());
@@ -159,20 +178,20 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void testPeek() {
     create(5);
-    heap.push(4, newEntry(-16L));
-    heap.push(2, newEntry(13L));
-    heap.push(1, newEntry(-51L));
-    heap.push(3, newEntry(4L));
+    heap.push(4, -16L);
+    heap.push(2, 13L);
+    heap.push(1, -51L);
+    heap.push(3, 4L);
     assertEquals(1, heap.peekId());
-    assertEquals(newEntry(-51L), heap.peekValue());
+    assertEquals(-51L, heap.peekValue());
   }
 
   @Test
   void pushAndPoll() {
     create(10);
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(23L));
-    heap.push(3, newEntry(23L));
+    heap.push(9, 36L);
+    heap.push(5, 23L);
+    heap.push(3, 23L);
     assertEquals(3, heap.size());
     heap.poll();
     assertEquals(2, heap.size());
@@ -184,11 +203,11 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void pollSorted() {
     create(10);
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(21L));
-    heap.push(3, newEntry(23L));
-    heap.push(8, newEntry(57L));
-    heap.push(7, newEntry(22L));
+    heap.push(9, 36L);
+    heap.push(5, 21L);
+    heap.push(3, 23L);
+    heap.push(8, 57L);
+    heap.push(7, 22L);
     IntArrayList polled = new IntArrayList();
     while (!heap.isEmpty()) {
       polled.add(heap.poll());
@@ -202,19 +221,19 @@ class ArraySortableFeatureMinHeapTest {
     assertTrue(heap.isEmpty());
     assertEquals(0, heap.size());
 
-    heap.push(9, newEntry(36L));
+    heap.push(9, 36L);
     assertFalse(heap.isEmpty());
     assertEquals(1, heap.size());
 
-    heap.push(5, newEntry(21L));
+    heap.push(5, 21L);
     assertFalse(heap.isEmpty());
     assertEquals(2, heap.size());
 
-    heap.push(3, newEntry(23L));
+    heap.push(3, 23L);
     assertFalse(heap.isEmpty());
     assertEquals(3, heap.size());
 
-    heap.push(8, newEntry(57L));
+    heap.push(8, 57L);
     assertFalse(heap.isEmpty());
     assertEquals(4, heap.size());
 
@@ -238,9 +257,9 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void clear() {
     create(10);
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(21L));
-    heap.push(3, newEntry(23L));
+    heap.push(9, 36L);
+    heap.push(5, 21L);
+    heap.push(3, 23L);
     heap.clear();
     assertTrue(heap.isEmpty());
     assertEquals(0, heap.size());
@@ -250,7 +269,7 @@ class ArraySortableFeatureMinHeapTest {
   void poll100Ascending() {
     create(100);
     for (int i = 1; i < 100; i++) {
-      heap.push(i, newEntry(i));
+      heap.push(i, i);
     }
     for (int i = 1; i < 100; i++) {
       assertEquals(i, heap.poll());
@@ -261,7 +280,7 @@ class ArraySortableFeatureMinHeapTest {
   void poll100Descending() {
     create(100);
     for (int i = 99; i >= 1; i--) {
-      heap.push(i, newEntry(i));
+      heap.push(i, i);
     }
     for (int i = 1; i < 100; i++) {
       assertEquals(i, heap.poll());
@@ -271,61 +290,16 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void update() {
     create(10);
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(21L));
-    heap.push(3, newEntry(23L));
-    heap.update(3, newEntry(1L));
+    heap.push(9, 36L);
+    heap.push(5, 21L);
+    heap.push(3, 23L);
+    heap.update(3, 1L);
     assertEquals(3, heap.peekId());
-    heap.update(3, newEntry(100L));
+    heap.update(3, 100L);
     assertEquals(5, heap.peekId());
-    heap.update(9, newEntry(-13L));
+    heap.update(9, -13L);
     assertEquals(9, heap.peekId());
-    assertEquals(newEntry(-13L), heap.peekValue());
-    IntArrayList polled = new IntArrayList();
-    while (!heap.isEmpty()) {
-      polled.add(heap.poll());
-    }
-    assertEquals(IntArrayList.from(9, 5, 3), polled);
-  }
-
-  @Test
-  void updateWithEqualKeys() {
-    create(10);
-    heap.push(9, newEntry(36L));
-    heap.push(5, newEntry(21L, new byte[]{(byte) 1, (byte) 2}));
-    heap.push(3, newEntry(23L));
-    heap.update(3, newEntry(1L));
-    assertEquals(3, heap.peekId());
-    heap.update(3, newEntry(100L));
-    assertEquals(5, heap.peekId());
-    // until here same as update() test, now some "key collisions"
-
-    // prepare for hitting entry id=5 with sortable feature which has same ID but different value
-    heap.update(9, newEntry(21L, new byte[]{(byte) 100, (byte) 200}));
-    assertEquals(5, heap.peekId());
-
-    // hit "percolate up", NOT replacing item id=5
-    heap.update(9, newEntry(21L, new byte[]{(byte) 10, (byte) 20}));
-    assertEquals(5, heap.peekId());
-
-    // hit "percolate down"
-    heap.update(9, newEntry(21L, new byte[]{(byte) 20, (byte) 30}));
-    assertEquals(5, heap.peekId());
-
-    // hit "percolate up", still NOT replacing item id=5
-    heap.update(9, newEntry(21L, new byte[]{(byte) 5, (byte) 10}));
-    assertEquals(5, heap.peekId());
-
-    // hit "percolate up" one last time, now replacing item id=5
-    SortableFeature SF = newEntry(21L, new byte[]{(byte) 0, (byte) 0});
-    heap.update(9, SF);
-    assertEquals(9, heap.peekId());
-    assertEquals(SF, heap.peekValue());
-
-    // and from now on again same as update() test
-    heap.update(9, newEntry(-13L));
-    assertEquals(9, heap.peekId());
-    assertEquals(newEntry(-13L), heap.peekValue());
+    assertEquals(-13L, heap.peekValue());
     IntArrayList polled = new IntArrayList();
     while (!heap.isEmpty()) {
       polled.add(heap.poll());
@@ -336,14 +310,14 @@ class ArraySortableFeatureMinHeapTest {
   @Test
   void updateHead() {
     create(10);
-    heap.push(1, newEntry(1));
-    heap.push(2, newEntry(2));
-    heap.push(3, newEntry(3));
-    heap.push(4, newEntry(4));
-    heap.push(5, newEntry(5));
-    heap.updateHead(newEntry(6));
-    heap.updateHead(newEntry(7));
-    heap.updateHead(newEntry(8));
+    heap.push(1, 1);
+    heap.push(2, 2);
+    heap.push(3, 3);
+    heap.push(4, 4);
+    heap.push(5, 5);
+    heap.updateHead(6);
+    heap.updateHead(7);
+    heap.updateHead(8);
 
     IntArrayList polled = new IntArrayList();
     while (!heap.isEmpty()) {
@@ -356,23 +330,21 @@ class ArraySortableFeatureMinHeapTest {
   void randomPushsThenPolls() {
     Random rnd = new Random(0);
     int size = 1 + rnd.nextInt(100);
-    PriorityQueue<SortableFeature> pq = new PriorityQueue<>(size);
+    PriorityQueue<Entry> pq = new PriorityQueue<>(size);
     create(size);
     IntSet set = new IntHashSet();
     while (pq.size() < size) {
       int id = rnd.nextInt(size);
       if (!set.add(id))
         continue;
-      long key = (long) (Long.MAX_VALUE * rnd.nextFloat());
-      byte[] value = new byte[]{(byte) id, (byte) (id + 1)};
-      SortableFeature sf = new SortableFeature(key, value);
-      pq.add(sf);
-      heap.push(id, sf);
+      long val = (long) (Long.MAX_VALUE * rnd.nextFloat());
+      pq.add(new Entry(id, val));
+      heap.push(id, val);
     }
     while (!pq.isEmpty()) {
-      SortableFeature entry = pq.poll();
-      assertEquals(entry, heap.peekValue());
-      assertEquals(entry.value()[0], (byte) heap.poll());
+      Entry entry = pq.poll();
+      assertEquals(entry.val, heap.peekValue());
+      assertEquals(entry.id, heap.poll());
       assertEquals(pq.size(), heap.size());
     }
   }
@@ -381,7 +353,7 @@ class ArraySortableFeatureMinHeapTest {
   void randomPushsAndPolls() {
     Random rnd = new Random(0);
     int size = 1 + rnd.nextInt(100);
-    PriorityQueue<SortableFeature> pq = new PriorityQueue<>(size);
+    PriorityQueue<Entry> pq = new PriorityQueue<>(size);
     create(size);
     IntSet set = new IntHashSet();
     int pushCount = 0;
@@ -391,21 +363,34 @@ class ArraySortableFeatureMinHeapTest {
         int id = rnd.nextInt(size);
         if (!set.add(id))
           continue;
-        long key = (long) (Long.MAX_VALUE * rnd.nextFloat());
-        byte[] value = new byte[]{(byte) id, (byte) (id + 1)};
-        SortableFeature sf = new SortableFeature(key, value);
-        heap.push(id, sf);
+        long val = (long) (Long.MAX_VALUE * rnd.nextFloat());
+        pq.add(new Entry(id, val));
+        heap.push(id, val);
         pushCount++;
       } else {
-        SortableFeature entry = pq.poll();
+        Entry entry = pq.poll();
         assert entry != null;
-        assertEquals(entry, heap.peekValue());
-        int id = heap.poll();
-        assertEquals(entry.value()[0], (byte) id);
+        assertEquals(entry.val, heap.peekValue());
+        assertEquals(entry.id, heap.poll());
         assertEquals(pq.size(), heap.size());
-        set.removeAll(id);
+        set.removeAll(entry.id);
       }
     }
     assertTrue(pushCount > 0);
+  }
+
+  static class Entry implements Comparable<Entry> {
+    int id;
+    long val;
+
+    public Entry(int id, long val) {
+      this.id = id;
+      this.val = val;
+    }
+
+    @Override
+    public int compareTo(Entry o) {
+      return Long.compare(val, o.val);
+    }
   }
 }
