@@ -6,11 +6,7 @@ public record SortableFeature(@Override long key, byte[] value) implements Compa
 
   @Override
   public int compareTo(SortableFeature o) {
-    int result = Long.compare(key, o.key);
-    if (result == 0) {
-      result = Arrays.compare(value, o.value);
-    }
-    return result;
+    return Long.compare(key, o.key);
   }
 
   @Override
