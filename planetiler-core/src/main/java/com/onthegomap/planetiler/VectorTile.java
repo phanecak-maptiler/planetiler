@@ -74,6 +74,7 @@ import vector_tile.VectorTileProto;
  */
 @NotThreadSafe
 public class VectorTile {
+  public static final long NO_FEATURE_ID = 0;
 
   private static final Logger LOGGER = LoggerFactory.getLogger(VectorTile.class);
 
@@ -532,7 +533,7 @@ public class VectorTile {
           .setType(feature.geometry().geomType().asProtobufType())
           .addAllGeometry(Ints.asList(feature.geometry().commands()));
 
-        if (feature.id >= 0) {
+        if (feature.id != NO_FEATURE_ID) {
           featureBuilder.setId(feature.id);
         }
 
