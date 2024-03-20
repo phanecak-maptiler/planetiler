@@ -21,7 +21,7 @@
     <maven.compiler.target>21</maven.compiler.target>
     <maven.source.excludeResources>true</maven.source.excludeResources>
     <jackson.version>2.16.1</jackson.version>
-    <junit.version>5.10.1</junit.version>
+    <junit.version>5.10.2</junit.version>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     <sonar.organization>onthegomap</sonar.organization>
     <sonar.projectKey>onthegomap_planetiler</sonar.projectKey>
@@ -104,7 +104,7 @@
       <dependency>
         <groupId>org.commonmark</groupId>
         <artifactId>commonmark</artifactId>
-        <version>0.21.0</version>
+        <version>0.22.0</version>
       </dependency>
       <dependency>
         <groupId>org.junit.jupiter</groupId>
@@ -127,7 +127,7 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.10.0</version>
+        <version>5.11.0</version>
         <scope>test</scope>
       </dependency>
     </dependencies>
@@ -285,7 +285,7 @@
         <plugin>
           <groupId>com.google.cloud.tools</groupId>
           <artifactId>jib-maven-plugin</artifactId>
-          <version>3.4.0</version>
+          <version>3.4.1</version>
           <configuration>
             <skip>true</skip>
           </configuration>
