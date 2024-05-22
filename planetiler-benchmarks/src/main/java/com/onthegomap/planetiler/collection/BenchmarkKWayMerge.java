@@ -12,7 +12,6 @@ import java.util.stream.IntStream;
  * Times how long it takes to merge N sorted lists of random elements.
  */
 public class BenchmarkKWayMerge {
-
   public static void main(String[] args) {
     for (int i = 0; i < 4; i++) {
       System.err.println();

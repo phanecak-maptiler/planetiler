@@ -91,7 +91,6 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
   }
 
   private void renderPoint(FeatureCollector.Feature feature, Coordinate... origCoords) {
-    long id = feature.getId();
     boolean hasLabelGrid = feature.hasLabelGrid();
     Coordinate[] coords = new Coordinate[origCoords.length];
     for (int i = 0; i < origCoords.length; i++) {
@@ -132,7 +131,7 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
         TileCoord tile = entry.getKey();
         List<List<CoordinateSequence>> result = entry.getValue();
         Geometry geom = GeometryCoordinateSequences.reassemblePoints(result);
-        encodeAndEmitFeature(feature, id, attrs, tile, geom, groupInfo, 0);
+        encodeAndEmitFeature(feature, feature.getId(), attrs, tile, geom, groupInfo, 0);
         emitted++;
       }
       stats.emittedFeatures(zoom, feature.getLayer(), emitted);
@@ -173,7 +172,6 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
   }
 
   private void renderLineOrPolygon(FeatureCollector.Feature feature, Geometry input) {
-    long id = feature.getId();
     boolean area = input instanceof Polygonal;
     double worldLength = (area || input.getNumGeometries() > 1) ? 0 : input.getLength();
     String numPointsAttr = feature.getNumPointsAttr();
@@ -217,7 +215,7 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
         attrs = new TreeMap<>(attrs);
         attrs.put(numPointsAttr, geom.getNumPoints());
       }
-      writeTileFeatures(z, id, feature, sliced, attrs);
+      writeTileFeatures(z, feature.getId(), feature, sliced, attrs);
     }
 
     stats.processedElement(area ? "polygon" : "line", feature.getLayer());
