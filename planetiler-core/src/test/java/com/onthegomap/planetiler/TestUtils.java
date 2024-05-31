@@ -279,7 +279,7 @@ public class TestUtils {
         case UNKNOWN -> throw new IllegalArgumentException("cannot decompress \"UNKNOWN\"");
       };
       var decoded = VectorTile.decode(bytes).stream()
-        .map(feature -> feature(decodeSilently(feature.geometry()), feature.layer(), feature.attrs())).toList();
+        .map(feature -> feature(decodeSilently(feature.geometry()), feature.layer(), feature.tags())).toList();
       tiles.put(tile.coord(), decoded);
     }
     return tiles;
@@ -420,6 +420,24 @@ public class TestUtils {
     @Override
     public String toString() {
       return "Norm{" + geom.norm() + '}';
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+  }
+
+  public record RoundGeometry(Geometry geom) implements GeometryComparision {
+
+    @Override
+    public boolean equals(Object o) {
+      return o instanceof GeometryComparision that && round(geom).equalsNorm(round(that.geom()));
+    }
+
+    @Override
+    public String toString() {
+      return "Round{" + round(geom).norm() + '}';
     }
 
     @Override
@@ -738,7 +756,7 @@ public class TestUtils {
           if (feature.geometry().decode().isWithinDistance(tilePoint, 2)) {
             containedInLayers.add(feature.layer());
             if (layer.equals(feature.layer())) {
-              Map<String, Object> tags = feature.attrs();
+              Map<String, Object> tags = feature.tags();
               containedInLayerFeatures.add(tags.toString());
               if (tags.entrySet().containsAll(attrs.entrySet())) {
                 // found a match
