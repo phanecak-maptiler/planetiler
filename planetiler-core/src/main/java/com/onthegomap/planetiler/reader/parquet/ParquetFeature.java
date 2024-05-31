@@ -2,10 +2,13 @@ package com.onthegomap.planetiler.reader.parquet;
 
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
+import com.onthegomap.planetiler.geo.GeometryType;
 import com.onthegomap.planetiler.reader.SourceFeature;
+import com.onthegomap.planetiler.reader.Struct;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.apache.parquet.schema.MessageType;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.Lineal;
 import org.locationtech.jts.geom.Polygonal;
@@ -17,24 +20,36 @@ import org.locationtech.jts.geom.Puntal;
 public class ParquetFeature extends SourceFeature {
 
   private final GeometryReader geometryParser;
-  private final Path filename;
+  private final Object rawGeometry;
+  private final Path path;
+  private final MessageType schema;
   private Geometry latLon;
   private Geometry world;
+  private Struct struct = null;
+  private GeometryType geometryType = null;
 
-  ParquetFeature(String source, String sourceLayer, Path filename, long id, GeometryReader geometryParser,
-    Map<String, Object> tags) {
+  ParquetFeature(String source, String sourceLayer, long id, GeometryReader geometryParser,
+    Map<String, Object> tags, Path path, MessageType schema) {
     super(tags, source, sourceLayer, List.of(), id);
     this.geometryParser = geometryParser;
-    this.filename = filename;
+    this.rawGeometry = tags.remove(geometryParser.geometryColumn);
+    this.path = path;
+    this.schema = schema;
   }
 
-  public Path getFilename() {
-    return filename;
+  /** Returns the parquet file that this feature was read from. */
+  public Path path() {
+    return path;
+  }
+
+  /** Returns the {@link MessageType} schema of the parquet file that this feature was read from. */
+  public MessageType parquetSchema() {
+    return schema;
   }
 
   @Override
   public Geometry latLonGeometry() throws GeometryException {
-    return latLon == null ? latLon = geometryParser.readPrimaryGeometry(this) : latLon;
+    return latLon == null ? latLon = geometryParser.parseGeometry(rawGeometry, geometryParser.geometryColumn) : latLon;
   }
 
   @Override
@@ -43,31 +58,80 @@ public class ParquetFeature extends SourceFeature {
       (world = GeoUtils.sortPolygonsByAreaDescending(GeoUtils.latLonToWorldCoords(latLonGeometry())));
   }
 
+  private GeometryType geometryType() {
+    if (geometryType != null) {
+      return geometryType;
+    }
+    geometryType = geometryParser.sniffGeometryType(rawGeometry, geometryParser.geometryColumn);
+    if (geometryType == GeometryType.UNKNOWN) {
+      try {
+        geometryType = switch (latLonGeometry()) {
+          case Puntal ignored -> GeometryType.POINT;
+          case Lineal ignored -> GeometryType.LINE;
+          case Polygonal ignored -> GeometryType.POLYGON;
+          default -> GeometryType.UNKNOWN;
+        };
+      } catch (GeometryException e) {
+        throw new IllegalStateException(e);
+      }
+    }
+    return geometryType;
+  }
+
   @Override
   public boolean isPoint() {
-    try {
-      return latLonGeometry() instanceof Puntal;
-    } catch (GeometryException e) {
-      throw new IllegalStateException(e);
-    }
+    return geometryType() == GeometryType.POINT;
   }
 
   @Override
   public boolean canBePolygon() {
-    try {
-      return latLonGeometry() instanceof Polygonal;
-    } catch (GeometryException e) {
-      throw new IllegalStateException(e);
-    }
+    return geometryType() == GeometryType.POLYGON;
   }
 
   @Override
   public boolean canBeLine() {
-    try {
-      return latLonGeometry() instanceof Lineal;
-    } catch (GeometryException e) {
-      throw new IllegalStateException(e);
+    return geometryType() == GeometryType.LINE;
+  }
+
+  private Struct cachedStruct() {
+    return struct != null ? struct : (struct = Struct.of(tags()));
+  }
+
+  @Override
+  public Struct getStruct(String key) {
+    return cachedStruct().get(key);
+  }
+
+  @Override
+  public Struct getStruct(Object key, Object... others) {
+    return cachedStruct().get(key, others);
+  }
+
+  @Override
+  public Object getTag(String key) {
+    var value = tags().get(key);
+    if (value == null) {
+      String[] parts = key.split("\\.", 2);
+      if (parts.length == 2) {
+        return getStruct(parts[0]).get(parts[1]).rawValue();
+      }
+      return getStruct(parts[0]).rawValue();
     }
+    return value;
+  }
+
+  @Override
+  public Object getTag(String key, Object defaultValue) {
+    var value = getTag(key);
+    if (value == null) {
+      value = defaultValue;
+    }
+    return value;
+  }
+
+  @Override
+  public boolean hasTag(String key) {
+    return super.hasTag(key) || getTag(key) != null;
   }
 
   @Override
