@@ -28,7 +28,7 @@
     <sonar.projectKey>onthegomap_planetiler</sonar.projectKey>
     <sonar.moduleKey>${project.artifactId}</sonar.moduleKey>
     <sonar.exclusions>planetiler-benchmarks/**/*, planetiler-openmaptiles/**/*</sonar.exclusions>
-    <revision>0.7-ph-test-SNAPSHOT</revision>
+    <revision>0.8-ph-test-SNAPSHOT</revision>
     <timestamp>${maven.build.timestamp}</timestamp>
   </properties>
 
@@ -216,7 +216,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.4.1</version>
+        <version>3.5.0</version>
         <executions>
           <execution>
             <id>enforce-java</id>
@@ -301,7 +301,7 @@
         <plugin>
           <groupId>com.google.cloud.tools</groupId>
           <artifactId>jib-maven-plugin</artifactId>
-          <version>3.4.2</version>
+          <version>3.4.3</version>
           <configuration>
             <skip>true</skip>
           </configuration>
@@ -310,7 +310,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.6.3</version>
+          <version>3.7.0</version>
           <configuration>
             <quiet>true</quiet>
             <doclint>-missing</doclint>
@@ -329,7 +329,7 @@
         <plugin>
           <groupId>org.sonarsource.scanner.maven</groupId>
           <artifactId>sonar-maven-plugin</artifactId>
-          <version>3.11.0.3922</version>
+          <version>4.0.0.4121</version>
         </plugin>
         <plugin>
           <groupId>org.jacoco</groupId>
