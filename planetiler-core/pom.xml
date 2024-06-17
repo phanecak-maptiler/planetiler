@@ -16,7 +16,7 @@
   </parent>
 
   <properties>
-    <geotools.version>31.1</geotools.version>
+    <geotools.version>31.2</geotools.version>
     <log4j.version>2.23.1</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
     <protobuf.version>3.25.3</protobuf.version>
@@ -125,6 +125,10 @@
       <version>${jackson.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.snakeyaml</groupId>
+      <artifactId>snakeyaml-engine</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.prometheus</groupId>
       <artifactId>simpleclient</artifactId>
       <version>${prometheus.version}</version>
@@ -152,7 +156,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>33.2.0-jre</version>
+      <version>33.2.1-jre</version>
     </dependency>
     <dependency>
       <groupId>mil.nga.geopackage</groupId>
@@ -174,7 +178,7 @@
     <dependency>
       <groupId>blue.strategic.parquet</groupId>
       <artifactId>parquet-floor</artifactId>
-      <version>1.43</version>
+      <version>1.44</version>
     </dependency>
 
   </dependencies>
