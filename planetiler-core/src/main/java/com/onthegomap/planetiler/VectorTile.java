@@ -1193,7 +1193,7 @@ public class VectorTile {
       if (lineToIndex > 0) {
         if (lineToLength == 0) {
           // remove empty LineTo
-          result.remove(lineToIndex);
+          result.removeAt(lineToIndex);
         } else {
           // update LineTo with new length
           result.set(lineToIndex, commandAndLength(Command.LINE_TO, lineToLength));
