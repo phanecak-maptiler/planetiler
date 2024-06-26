@@ -27,12 +27,12 @@
     <dependency>
       <groupId>com.carrotsearch</groupId>
       <artifactId>hppc</artifactId>
-      <version>0.9.1</version>
+      <version>0.10.0</version>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
       <artifactId>RoaringBitmap</artifactId>
-      <version>1.0.6</version>
+      <version>1.1.0</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
