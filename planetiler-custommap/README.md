@@ -65,6 +65,10 @@ A description that tells planetiler how to read geospatial objects with tags fro
   For [geofabrik](https://download.geofabrik.de/) named areas, use `geofabrik:`  prefixes, for
   example `geofabrik:rhode-island`. Can be a string or [expression](#expression) that can
   reference [argument values](#arguments).
+- `projection` - Planetiler will try to determine the projection automatically for shapefile/geopackage sources, but if
+  that is not correct you can override the projection by specifying a coordinate reference system authority code
+  like `EPSG:3857` or `EPSG:4326` here. Can be a string or [expression](#expression) that can
+  reference [argument values](#arguments).
 
 For example:
 
@@ -214,17 +218,22 @@ layers:
 
 A feature is a defined set of objects that meet a specified filter criteria.
 
-- `source` - A string [source](#source) ID, or list of source IDs from which features should be extracted
+- `source` - A string [source](#source) ID, or list of source IDs from which features should be extracted. If missing,
+  features from all sources are included.
 - `geometry` - A string enum that indicates which geometry types to include, and how to transform them. Can be one
   of:
   - `point` `line` or `polygon` to pass the original feature through
+  - `any` (default) to pass the original feature through regardless of geometry type
   - `polygon_centroid` to match on polygons, and emit a point at the center
-  - `line_centroid` to match on lines, and emit a point at the center
+  - `line_centroid` to match on lines, and emit a point at the centroid of the line
+  - `line_midpoint` to match on lines, and emit a point at midpoint of the line
   - `centroid` to match any geometry, and emit a point at the center
   - `polygon_point_on_surface` to match on polygons, and emit an interior point
   - `point_on_line` to match on lines, and emit a point somewhere along the line
   - `polygon_centroid_if_convex` to match on polygons, and if the polygon is convex emit the centroid, otherwise emit an
     interior point
+  - `innermost_point` to match on any geometry and for polygons, emit the furthest point from an edge, or for lines emit
+    the midpoint.
 - `include_when` - A [Boolean Expression](#boolean-expression) which determines the features to include.
   If unspecified, all features from the specified sources are included.
 - `exclude_when` - A [Boolean Expression](#boolean-expression) which determines if a feature that matched the include
