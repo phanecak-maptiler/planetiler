@@ -26,7 +26,7 @@ import org.locationtech.jts.geom.Polygon;
  * All geometries except for {@link #latLonGeometry()} return elements in world web mercator coordinates where (0,0) is
  * the northwest corner and (1,1) is the southeast corner of the planet.
  */
-public abstract class SourceFeature implements WithTags, WithGeometryType {
+public abstract class SourceFeature implements WithTags, WithGeometryType, WithSource, WithSourceLayer {
 
   private final Map<String, Object> tags;
   private final String source;
@@ -124,9 +124,35 @@ public abstract class SourceFeature implements WithTags, WithGeometryType {
         innermostPointTolerance = tolerance;
       }
       return innermostPoint;
+    } else if (canBeLine()) {
+      return lineMidpoint();
     } else {
       return pointOnSurface();
     }
+  }
+
+  /**
+   * Returns the midpoint of this line, or the longest segment if it is a multilinestring.
+   */
+  public final Geometry lineMidpoint() throws GeometryException {
+    if (innermostPoint == null) {
+      innermostPoint = pointAlongLine(0.5);
+    }
+    return innermostPoint;
+  }
+
+  /**
+   * Returns along this line where {@code ratio=0} is the start {@code ratio=1} is the end and {@code ratio=0.5} is the
+   * midpoint.
+   * <p>
+   * When this is a multilinestring, the longest segment is used.
+   */
+  public final Geometry pointAlongLine(double ratio) throws GeometryException {
+    if (lineSplitter == null) {
+      var line = line();
+      lineSplitter = new LineSplitter(line instanceof MultiLineString multi ? GeoUtils.getLongestLine(multi) : line);
+    }
+    return lineSplitter.get(ratio);
   }
 
   private Geometry computeCentroidIfConvex() throws GeometryException {
@@ -279,11 +305,13 @@ public abstract class SourceFeature implements WithTags, WithGeometryType {
   }
 
   /** Returns the ID of the source that this feature came from. */
+  @Override
   public String getSource() {
     return source;
   }
 
   /** Returns the layer ID within a source that this feature comes from. */
+  @Override
   public String getSourceLayer() {
     return sourceLayer;
   }
