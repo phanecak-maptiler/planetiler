@@ -3,35 +3,26 @@ package com.onthegomap.planetiler.geo;
 import static com.onthegomap.planetiler.TestUtils.assertSameNormalizedFeature;
 import static com.onthegomap.planetiler.TestUtils.newLineString;
 import static com.onthegomap.planetiler.TestUtils.newPolygon;
-import static com.onthegomap.planetiler.TestUtils.rectangle;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.Polygonal;
 import org.locationtech.jts.geom.util.AffineTransformation;
 
-class DouglasPeuckerSimplifierTest {
+class VWSimplifierTest {
 
   final int[] rotations = new int[]{0, 45, 90, 180, 270};
 
   private void testSimplify(Geometry in, Geometry expected, double amount) {
     for (int rotation : rotations) {
       var rotate = AffineTransformation.rotationInstance(Math.PI * rotation / 180);
-      var expRot = rotate.transform(expected);
-      var inRot = rotate.transform(in);
       assertSameNormalizedFeature(
-        expRot,
-        DouglasPeuckerSimplifier.simplify(inRot, amount)
+        rotate.transform(expected),
+        new VWSimplifier().setTolerance(amount).setWeight(0).transform(rotate.transform(in))
       );
-
-      // ensure the List<Coordinate> version also works...
-      List<Coordinate> inList = List.of(inRot.getCoordinates());
-      List<Coordinate> expList = List.of(expRot.getCoordinates());
-      List<Coordinate> actual = DouglasPeuckerSimplifier.simplify(inList, amount, in instanceof Polygonal);
-      assertEquals(expList, actual);
+      assertSameNormalizedFeature(
+        rotate.transform(expected.reverse()),
+        new VWSimplifier().setTolerance(amount).setWeight(0).transform(rotate.transform(in.reverse()))
+      );
     }
   }
 
@@ -55,7 +46,7 @@ class DouglasPeuckerSimplifierTest {
     ), newLineString(
       0, 0,
       10, 0
-    ), 1);
+    ), 5);
   }
 
   @Test
@@ -68,20 +59,58 @@ class DouglasPeuckerSimplifierTest {
       0, 0,
       5, 1.1,
       10, 0
-    ), 1);
+    ), 5);
   }
 
   @Test
   void testPolygonLeaveAPoint() {
     testSimplify(
-      rectangle(0, 10),
       newPolygon(
         0, 0,
-        10, 0,
+        10, 10,
+        9, 10,
+        0, 8,
+        0, 0
+      ),
+      newPolygon(
+        0, 0,
+        0, 8,
         10, 10,
         0, 0
       ),
-      20
+      200
+    );
+  }
+
+  @Test
+  void testLine() {
+    testSimplify(
+      newLineString(
+        0, 0,
+        1, 0.1,
+        2, 0,
+        3, 0.1
+      ),
+      newLineString(
+        0, 0,
+        1, 0.1,
+        2, 0,
+        3, 0.1
+      ),
+      0.09
+    );
+    testSimplify(
+      newLineString(
+        0, 0,
+        1, 0.1,
+        2, 0,
+        3, 0.1
+      ),
+      newLineString(
+        0, 0,
+        3, 0.1
+      ),
+      0.11
     );
   }
 }
