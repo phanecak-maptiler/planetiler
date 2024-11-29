@@ -6,8 +6,10 @@ import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.geo.DouglasPeuckerSimplifier;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
+import com.onthegomap.planetiler.geo.SimplifyMethod;
 import com.onthegomap.planetiler.geo.TileCoord;
 import com.onthegomap.planetiler.geo.TileExtents;
+import com.onthegomap.planetiler.geo.VWSimplifier;
 import com.onthegomap.planetiler.stats.Stats;
 import java.io.Closeable;
 import java.io.IOException;
@@ -28,7 +30,6 @@ import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.geom.Polygonal;
-import org.locationtech.jts.geom.impl.PackedCoordinateSequence;
 import org.locationtech.jts.geom.util.AffineTransformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,14 +40,6 @@ import org.slf4j.LoggerFactory;
  */
 public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Closeable {
   private static final Logger LOGGER = LoggerFactory.getLogger(FeatureRenderer.class);
-  private static final VectorTile.VectorGeometry FILL = VectorTile.encodeGeometry(GeoUtils.JTS_FACTORY
-    .createPolygon(GeoUtils.JTS_FACTORY.createLinearRing(new PackedCoordinateSequence.Double(new double[]{
-      -5, -5,
-      261, -5,
-      261, 261,
-      -5, 261,
-      -5, -5
-    }, 2, 0))));
   private final PlanetilerConfig config;
   private final Consumer<RenderedFeature> consumer;
   private final Stats stats;
@@ -203,6 +196,7 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
     int z, double minSize, boolean area) {
     double scale = 1 << z;
     double tolerance = feature.getPixelToleranceAtZoom(z) / 256d;
+    SimplifyMethod simplifyMethod = feature.getSimplifyMethodAtZoom(z);
     double buffer = feature.getBufferPixelsAtZoom(z) / 256;
     TileExtents.ForZoom extents = config.bounds().tileExtents().getForZoom(z);
 
@@ -210,7 +204,15 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
     // simplify only takes 4-5 minutes of wall time when generating the planet though, so not a big deal
     Geometry scaled = AffineTransformation.scaleInstance(scale, scale).transform(input);
     TiledGeometry sliced;
-    Geometry geom = DouglasPeuckerSimplifier.simplify(scaled, tolerance);
+    // TODO replace with geometry pipeline when available
+    Geometry geom = switch (simplifyMethod) {
+      case RETAIN_IMPORTANT_POINTS -> DouglasPeuckerSimplifier.simplify(scaled, tolerance);
+      // DP tolerance is displacement, and VW tolerance is area, so square what the user entered to convert from
+      // DP to VW tolerance
+      case RETAIN_EFFECTIVE_AREAS -> new VWSimplifier().setTolerance(tolerance * tolerance).transform(scaled);
+      case RETAIN_WEIGHTED_EFFECTIVE_AREAS ->
+        new VWSimplifier().setWeight(0.7).setTolerance(tolerance * tolerance).transform(scaled);
+    };
     List<List<CoordinateSequence>> groups = GeometryCoordinateSequences.extractGroups(geom, minSize);
     try {
       sliced = TiledGeometry.sliceIntoTiles(groups, buffer, area, z, extents);
@@ -282,13 +284,13 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
     // polygons that span multiple tiles contain detail about the outer edges separate from the filled tiles, so emit
     // filled tiles now
     if (feature.isPolygon()) {
-      emitted += emitFilledTiles(id, feature, sliced);
+      emitted += emitFilledTiles(zoom, id, feature, sliced);
     }
 
     stats.emittedFeatures(zoom, feature.getLayer(), emitted);
   }
 
-  private int emitFilledTiles(long id, FeatureCollector.Feature feature, TiledGeometry sliced) {
+  private int emitFilledTiles(int zoom, long id, FeatureCollector.Feature feature, TiledGeometry sliced) {
     Optional<RenderedFeature.Group> groupInfo = Optional.empty();
     /*
      * Optimization: large input polygons that generate many filled interior tiles (i.e. the ocean), the encoder avoids
@@ -298,7 +300,7 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
     VectorTile.Feature vectorTileFeature = new VectorTile.Feature(
       feature.getLayer(),
       id,
-      FILL,
+      VectorTile.encodeFill(feature.getBufferPixelsAtZoom(zoom)),
       feature.getAttrsAtZoom(sliced.zoomLevel())
     );
 

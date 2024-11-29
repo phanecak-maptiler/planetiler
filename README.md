@@ -41,7 +41,8 @@ to maintain and support (too much), hence:
 
 ## Demo
 
-See the [live demo](https://onthegomap.github.io/planetiler-demo/) of vector tiles created by Planetiler and [hosted by OpenStreetMap US](https://github.com/osmus/tileservice).
+See the [live demo](https://onthegomap.github.io/planetiler-demo/) of vector tiles created by Planetiler
+and [hosted by OpenStreetMap US](https://github.com/osmus/tileservice).
 
 [![Planetiler Demo Screenshot](./diagrams/demo.png)](https://onthegomap.github.io/planetiler-demo/)
 [© OpenMapTiles](https://www.openmaptiles.org/) [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright)
@@ -102,7 +103,7 @@ You will need the full data sources to run anywhere besides Monaco.
 
 #### To view tiles locally:
 
-Using [Node.js](https://nodejs.org/en/download/):
+Using [Node.js](https://nodejs.org/en/download/package-manager):
 
 ```bash
 npm install -g tileserver-gl-light
@@ -121,6 +122,7 @@ Some common arguments:
 
 - `--output` tells planetiler where to write output to, and what format to write it in. For
   example `--output=australia.pmtiles` creates a pmtiles archive named `australia.pmtiles`.
+  It is best to specify the full path to the file. In docker image you should be using `/data/australia.pmtiles` to let the docker know where to write the file.
 - `--download` downloads input sources automatically and `--only-download` exits after downloading
 - `--area=monaco` downloads a `.osm.pbf` extract from [Geofabrik](https://download.geofabrik.de/)
 - `--osm-path=path/to/file.osm.pbf` points Planetiler at an existing OSM extract on disk
