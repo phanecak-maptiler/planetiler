@@ -17,10 +17,10 @@
 
   <properties>
     <geotools.version>32.1</geotools.version>
-    <log4j.version>2.24.2</log4j.version>
+    <log4j.version>2.24.3</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
     <!-- needs to match CEL -->
-    <protobuf.version>4.29.1</protobuf.version>
+    <protobuf.version>4.29.2</protobuf.version>
     <geopackage.version>6.6.5</geopackage.version>
   </properties>
 
@@ -157,7 +157,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>33.3.1-jre</version>
+      <version>33.4.0-jre</version>
     </dependency>
     <dependency>
       <groupId>mil.nga.geopackage</groupId>
