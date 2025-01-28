@@ -10,11 +10,11 @@ import com.onthegomap.planetiler.collection.LongLongMap;
 import com.onthegomap.planetiler.collection.LongLongMultimap;
 import com.onthegomap.planetiler.config.Arguments;
 import com.onthegomap.planetiler.config.PlanetilerConfig;
-import com.onthegomap.planetiler.reader.GeoJsonReader;
 import com.onthegomap.planetiler.reader.GeoPackageReader;
 import com.onthegomap.planetiler.reader.NaturalEarthReader;
 import com.onthegomap.planetiler.reader.ShapefileReader;
 import com.onthegomap.planetiler.reader.SourceFeature;
+import com.onthegomap.planetiler.reader.geojson.GeoJsonReader;
 import com.onthegomap.planetiler.reader.osm.OsmInputFile;
 import com.onthegomap.planetiler.reader.osm.OsmNodeBoundsProvider;
 import com.onthegomap.planetiler.reader.osm.OsmReader;
@@ -437,7 +437,7 @@ public class Planetiler {
   }
 
   /**
-   * Adds a new GeoJSON source that will be processed when {@link #run()} is called.
+   * Adds a new GeoJSON or newline-delimited GeoJSON source that will be processed when {@link #run()} is called.
    * <p>
    * If the file does not exist and {@code download=true} argument is set, then the file will first be downloaded from
    * {@code defaultUrl}.
@@ -458,6 +458,11 @@ public class Planetiler {
     return addStage(name, "Process features in " + path,
       ifSourceUsed(name,
         () -> GeoJsonReader.process(name, List.of(path), featureGroup, config, profile, stats)));
+  }
+
+  /** Same as {@link #addGeoJsonSource(String, Path, String)} except don't download a remote file. */
+  public Planetiler addGeoJsonSource(String name, Path defaultPath) {
+    return addGeoJsonSource(name, defaultPath, null);
   }
 
   /**
@@ -613,7 +618,9 @@ public class Planetiler {
   public Translations translations() {
     if (translations == null) {
       boolean transliterate = arguments.getBoolean("transliterate", "attempt to transliterate latin names", true);
-      List<String> languages = arguments.getList("languages", "Languages to include labels for. \"default\" expands to the default set of languages configured by the profile. \"-lang\" excludes \"lang\". \"*\" includes every language not listed.", this.defaultLanguages);
+      List<String> languages = arguments.getList("languages",
+        "Languages to include labels for. \"default\" expands to the default set of languages configured by the profile. \"-lang\" excludes \"lang\". \"*\" includes every language not listed.",
+        this.defaultLanguages);
       if (languages.contains("default")) {
         languages = Stream.concat(
           languages.stream().filter(language -> !language.equals("default")),
