@@ -16,11 +16,11 @@
   </parent>
 
   <properties>
-    <geotools.version>32.2</geotools.version>
+    <geotools.version>33.0</geotools.version>
     <log4j.version>2.24.3</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
     <!-- needs to match CEL -->
-    <protobuf.version>4.29.3</protobuf.version>
+    <protobuf.version>4.30.2</protobuf.version>
     <geopackage.version>6.6.5</geopackage.version>
   </properties>
 
@@ -152,12 +152,12 @@
     <dependency>
       <groupId>com.ibm.icu</groupId>
       <artifactId>icu4j</artifactId>
-      <version>76.1</version>
+      <version>77.1</version>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>33.4.0-jre</version>
+      <version>33.4.8-jre</version>
     </dependency>
     <dependency>
       <groupId>mil.nga.geopackage</groupId>
@@ -179,12 +179,17 @@
     <dependency>
       <groupId>blue.strategic.parquet</groupId>
       <artifactId>parquet-floor</artifactId>
-      <version>1.49</version>
+      <version>1.50</version>
     </dependency>
     <dependency>
       <groupId>org.lz4</groupId>
       <artifactId>lz4-java</artifactId>
       <version>1.8.0</version>
+    </dependency>
+    <dependency>
+      <groupId>net.jcip</groupId>
+      <artifactId>jcip-annotations</artifactId>
+      <version>1.0</version>
     </dependency>
 
   </dependencies>
