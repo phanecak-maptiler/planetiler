@@ -16,11 +16,11 @@
   </parent>
 
   <properties>
-    <geotools.version>33.0</geotools.version>
+    <geotools.version>33.1</geotools.version>
     <log4j.version>2.24.3</log4j.version>
     <prometheus.version>0.16.0</prometheus.version>
     <!-- needs to match CEL -->
-    <protobuf.version>4.30.2</protobuf.version>
+    <protobuf.version>4.31.1</protobuf.version>
     <geopackage.version>6.6.5</geopackage.version>
   </properties>
 
