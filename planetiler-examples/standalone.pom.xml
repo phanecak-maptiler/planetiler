@@ -11,8 +11,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
-    <planetiler.version>0.9.1-SNAPSHOT</planetiler.version>
-    <junit.version>5.12.2</junit.version>
+    <planetiler.version>0.9.2-SNAPSHOT</planetiler.version>
+    <junit.version>5.13.3</junit.version>
     <!-- Replace this with the main class for the profile you add -->
     <mainClass>com.onthegomap.planetiler.examples.BikeRouteOverlay</mainClass>
   </properties>
@@ -37,9 +37,9 @@
       </releases>
     </repository>
     <repository>
-      <id>nexus-snapshots</id>
-      <name>Nexus SNAPSHOT Repository</name>
-      <url>https://s01.oss.sonatype.org/content/repositories/snapshots/</url>
+      <name>Central Portal Snapshots</name>
+      <id>central-portal-snapshots</id>
+      <url>https://central.sonatype.com/repository/maven-snapshots/</url>
       <snapshots>
         <enabled>true</enabled>
       </snapshots>
