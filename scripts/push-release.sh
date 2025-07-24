@@ -15,4 +15,4 @@ false && \
   -Djib.to.auth.password="${GITHUB_TOKEN}" \
   package jib:build --file pom.xml
 
-./mvnw -B -DskipTests -Prelease -Pflatten deploy
+./mvnw -B -DskipTests -Prelease -Pflatten -pl '+.,+planetiler-core' deploy
