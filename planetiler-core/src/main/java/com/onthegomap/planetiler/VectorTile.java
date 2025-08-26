@@ -637,6 +637,10 @@ public class VectorTile {
     this.layerStatsTracker = layerStats;
   }
 
+  public boolean isEmpty() {
+    return layers.isEmpty();
+  }
+
   enum Command {
     MOVE_TO(1),
     LINE_TO(2),
