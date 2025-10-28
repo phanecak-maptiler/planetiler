@@ -43,6 +43,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateList;
 import org.locationtech.jts.geom.CoordinateSequence;
@@ -85,6 +86,10 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
   private LongObjectHashMap<OsmRelationInfo> relationInfo = Hppc.newLongObjectHashMap();
   // ~800mb, ~1.6GB when sorting
   private LongLongMultimap.Appendable wayToRelations = LongLongMultimap.newAppendableMultimap();
+
+  // ~20mb or ~40mb while sorting
+  private LongLongMultimap.Appendable relationToParentRelations = LongLongMultimap.newAppendableMultimap();
+
   private final Object wayToRelationsLock = new Object();
   // for multipolygons need to store way info (20m ways, 800m nodes) to use when processing relations (4.5m)
   // ~300mb
@@ -260,17 +265,20 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
             phases.arrive(OsmPhaser.Phase.RELATIONS);
             try {
               List<OsmRelationInfo> infos = profile.preprocessOsmRelation(relation);
-              if (infos != null) {
+              if (infos != null && !infos.isEmpty()) {
                 synchronized (wayToRelationsLock) {
                   for (OsmRelationInfo info : infos) {
                     relationInfo.put(relation.id(), info);
                     relationInfoSizes.addAndGet(info.estimateMemoryUsageBytes());
-                    for (var member : relation.members()) {
-                      var type = member.type();
-                      // TODO handle nodes in relations and super-relations
-                      if (type == OsmElement.Type.WAY) {
-                        wayToRelations.put(member.ref(), encodeRelationMembership(member.role(), relation.id()));
-                      }
+                  }
+                  for (var member : relation.members()) {
+                    var type = member.type();
+                    // TODO handle nodes in relations
+                    if (type == OsmElement.Type.WAY) {
+                      wayToRelations.put(member.ref(), encodeRelationMembership(member.role(), relation.id()));
+                    } else if (type == OsmElement.Type.RELATION) {
+                      relationToParentRelations.put(member.ref(),
+                        encodeRelationMembership(member.role(), relation.id()));
                     }
                   }
                 }
@@ -535,9 +543,37 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
         RelationMembership parsed = decodeRelationMembership(encoded);
         OsmRelationInfo rel = relationInfo.get(parsed.relationId);
         if (rel != null) {
-          rels.add(new RelationMember<>(parsed.role, rel));
+          rels.add(new RelationMember<>(parsed.role, rel, List.of()));
+        }
+        LongArrayList parentRelations = relationToParentRelations.get(parsed.relationId);
+        if (parentRelations.isEmpty()) {
+          continue;
+        }
+        var visited = new HashSet<Long>();
+        visited.add(parsed.relationId);
+        for (int p = 0; p < parentRelations.size(); p++) {
+          rels.addAll(getRelationInfosForRelationId(parentRelations.get(p), visited, List.of(parsed.relationId())));
         }
       }
+    }
+    return rels;
+  }
+
+  private List<RelationMember<OsmRelationInfo>> getRelationInfosForRelationId(long relationIdAndRole,
+    HashSet<Long> visited, List<Long> parentRelationPath) {
+    var parsed = decodeRelationMembership(relationIdAndRole);
+    if (!visited.add(parsed.relationId)) {
+      return List.of();
+    }
+    LongArrayList parentRelations = relationToParentRelations.get(parsed.relationId);
+    List<RelationMember<OsmRelationInfo>> rels = new ArrayList<>(parentRelations.size());
+    OsmRelationInfo relation = relationInfo.get(parsed.relationId);
+    if (relation != null) {
+      rels.add(new RelationMember<>(parsed.role, relation, parentRelationPath));
+    }
+    for (int p = 0; p < parentRelations.size(); p++) {
+      rels.addAll(getRelationInfosForRelationId(parentRelations.get(p), visited,
+        Stream.concat(parentRelationPath.stream(), Stream.of(parsed.relationId)).toList()));
     }
     return rels;
   }
@@ -548,6 +584,7 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
     size += waysInMultipolygon == null ? 0 : waysInMultipolygon.serializedSizeInBytes();
     // multipolygonWayGeometries is reported separately
     size += estimateSize(wayToRelations);
+    size += estimateSize(relationToParentRelations);
     size += estimateSize(relationInfo);
     size += estimateSize(roleIdsReverse);
     size += estimateSize(roleIds);
@@ -563,6 +600,7 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
       multipolygonWayGeometries = null;
     }
     wayToRelations = null;
+    relationToParentRelations = null;
     waysInMultipolygon = null;
     relationInfo = null;
     nodeLocationDb.close();
@@ -591,11 +629,23 @@ public class OsmReader implements Closeable, MemoryEstimator.HasEstimate {
   /**
    * Member of a relation extracted from OSM input data.
    *
-   * @param <T>      type of the user-defined class storing information about the relation
-   * @param role     "role" of the relation member
-   * @param relation user-provided data about the relation from pass1
+   * @param <T>                type of the user-defined class storing information about the relation
+   * @param role               "role" of the relation member
+   * @param relation           user-provided data about the relation from pass1
+   * @param parentRelationPath the sequence of relation IDs that were traversed to get to this relation (if it is a
+   *                           super-relation). An empty list means this is a direct parent.
    */
-  public record RelationMember<T extends OsmRelationInfo>(String role, T relation) {}
+  public record RelationMember<T extends OsmRelationInfo>(String role, T relation, List<Long> parentRelationPath) {
+
+    public RelationMember(String role, T relation) {
+      this(role, relation, List.of());
+    }
+
+    /** Returns {@code true} if this is from a super-relation that contains a relation this element belongs to. */
+    public boolean isSuperRelation() {
+      return !parentRelationPath.isEmpty();
+    }
+  }
 
   /** Raw relation membership data that gets encoded/decoded into a long. */
   private record RelationMembership(String role, long relationId) {}
