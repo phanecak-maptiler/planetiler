@@ -2,6 +2,7 @@ package com.onthegomap.planetiler.config;
 
 import com.onthegomap.planetiler.archive.TileArchiveConfig;
 import com.onthegomap.planetiler.archive.TileCompression;
+import com.onthegomap.planetiler.archive.TileFormat;
 import com.onthegomap.planetiler.collection.LongLongMap;
 import com.onthegomap.planetiler.collection.Storage;
 import com.onthegomap.planetiler.reader.osm.PolyFileReader;
@@ -56,6 +57,10 @@ public record PlanetilerConfig(
   Boolean color,
   boolean keepUnzippedSources,
   TileCompression tileCompression,
+  TileFormat tileFormat,
+  boolean mltFsst,
+  boolean mltFastPfor,
+  boolean mltTessellatePolygons,
   boolean outputLayerStats,
   String debugUrlPattern,
   Path tmpDir,
@@ -129,6 +134,9 @@ public record PlanetilerConfig(
     Path tmpDir = arguments.file("tmpdir|tmp", "temp directory", Path.of("data", "tmp"));
     List<String> extraNameTags = arguments.getList("extra_name_tags", "Extra name tags to copy from OSM to output",
       List.of());
+
+    boolean mltAdvanced =
+      arguments.getBoolean("mlt_advanced", "Use FSST and FastPFOR encoding schemes when tile format=MLT", false);
 
     return new PlanetilerConfig(
       arguments,
@@ -207,6 +215,15 @@ public record PlanetilerConfig(
           "the tile compression, one of " +
             TileCompression.availableValues().stream().map(TileCompression::id).toList(),
           "gzip")),
+      TileFormat
+        .fromId(arguments.getString("tile_format",
+          "the tile format, one of " +
+            TileFormat.availableValues().stream().map(TileFormat::id).toList(),
+          "mvt")),
+      arguments.getBoolean("mlt_fastpfor", "Use FastPFOR encoding when tile format=MLT", mltAdvanced),
+      arguments.getBoolean("mlt_fsst", "Use FSST encoding when tile format=MLT", mltAdvanced),
+      arguments.getBoolean("mlt_tessellate_polygons",
+        "Pre-triangulate polygons when tile format=MLT so that clients do not need to", false),
       arguments.getBoolean("output_layerstats", "output a tsv.gz file for each tile/layer size", false),
       arguments.getString("debug_url", "debug url to use for displaying tiles with {z} {lat} {lon} placeholders",
         "https://onthegomap.github.io/planetiler-demo/#{z}/{lat}/{lon}"),

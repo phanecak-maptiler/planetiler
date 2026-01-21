@@ -10,6 +10,7 @@ import com.onthegomap.planetiler.archive.TileArchiveConfig;
 import com.onthegomap.planetiler.archive.TileArchiveMetadata;
 import com.onthegomap.planetiler.archive.TileArchiveWriter;
 import com.onthegomap.planetiler.archive.TileCompression;
+import com.onthegomap.planetiler.archive.TileFormat;
 import com.onthegomap.planetiler.collection.FeatureGroup;
 import com.onthegomap.planetiler.collection.LongLongMap;
 import com.onthegomap.planetiler.collection.LongLongMultimap;
@@ -293,15 +294,20 @@ class PlanetilerTests {
   }
 
   @ParameterizedTest
-  @ValueSource(booleans = {false, true})
-  void testSinglePoint(boolean anyGeom) throws Exception {
+  @CsvSource({
+    "false, mvt",
+    "true, mvt",
+    "false, mlt",
+    "true, mlt",
+  })
+  void testSinglePoint(boolean anyGeom, String tileType) throws Exception {
     double x = 0.5 + Z14_WIDTH / 4;
     double y = 0.5 + Z14_WIDTH / 4;
     double lat = GeoUtils.getWorldLat(y);
     double lng = GeoUtils.getWorldLon(x);
 
     var results = runWithReaderFeatures(
-      Map.of("threads", "1", "maxzoom", "15"),
+      Map.of("threads", "1", "maxzoom", "15", "tile-format", tileType),
       List.of(
         newReaderFeature(newPoint(lng, lat), Map.of(
           "attr", "value"
@@ -337,6 +343,58 @@ class PlanetilerTests {
       """
         [
           {"id": "layer", "fields": {"name": "String", "attr": "String"}, "minzoom": 13, "maxzoom": 15}
+        ]
+        """,
+      results.metadata.get("vector_layers")
+    );
+  }
+
+  @Test
+  void testAttributeTypeCoercion() throws Exception {
+    double x = 0.5 + Z14_WIDTH / 4;
+    double y = 0.5 + Z14_WIDTH / 4;
+    double lat = GeoUtils.getWorldLat(y);
+    double lng = GeoUtils.getWorldLon(x);
+
+    var results = runWithReaderFeatures(
+      Map.of("threads", "1", "maxzoom", "15", "tile-format", "mlt"),
+      List.of(
+        newReaderFeature(newPoint(lng, lat), Map.of(
+          "attr", "string"
+        )),
+        newReaderFeature(newPoint(lng, lat), Map.of(
+          "attr", 1
+        )),
+        newReaderFeature(newPoint(lng, lat), Map.of(
+          "attr", 1.5
+        )),
+        newReaderFeature(newPoint(lng, lat), Map.of(
+          "attr", true
+        ))
+      ),
+      (in, features) -> features.point("layer")
+        .setZoomRange(15, 15)
+        .inheritAttrFromSource("attr")
+    );
+
+    assertListsContainSameElements(List.of(
+      feature("layer", newPoint(128, 128), Map.of(
+        "attr", "string"
+      )),
+      feature("layer", newPoint(128, 128), Map.of(
+        "attr", "1"
+      )),
+      feature("layer", newPoint(128, 128), Map.of(
+        "attr", "1.5"
+      )),
+      feature("layer", newPoint(128, 128), Map.of(
+        "attr", "true"
+      ))
+    ), results.tiles.get(TileCoord.ofXYZ(Z15_TILES / 2, Z15_TILES / 2, 15)));
+    assertSameJson(
+      """
+        [
+          {"id": "layer", "fields": {"attr": "String"}, "minzoom": 15, "maxzoom": 15}
         ]
         """,
       results.metadata.get("vector_layers")
@@ -1182,6 +1240,129 @@ class PlanetilerTests {
         ))
       )
     )), sortListValues(results.tiles));
+  }
+
+  @Test
+  void testSplitAmbiguousOsmPolygon() throws Exception {
+    var results = runWithOsmElements(
+      Map.of("threads", "1"),
+      List.of(
+        new OsmElement.Node(1, GeoUtils.getWorldLat(120 / 256d), GeoUtils.getWorldLon(120 / 256d)),
+        new OsmElement.Node(2, GeoUtils.getWorldLat(120 / 256d), GeoUtils.getWorldLon(140 / 256d)),
+        new OsmElement.Node(3, GeoUtils.getWorldLat(140 / 256d), GeoUtils.getWorldLon(140 / 256d)),
+        new OsmElement.Node(4, GeoUtils.getWorldLat(0.5), GeoUtils.getWorldLon(0.5)),
+        with(new OsmElement.Way(4), way -> {
+          way.setTag("attr", "value1");
+          way.nodes().add(1, 2, 3, 1);
+        }),
+        with(new OsmElement.Way(5), way -> {
+          way.setTag("attr", "value2");
+          way.nodes().add(2, 4);
+        })
+      ),
+      new Profile() {
+        @Override
+        public void processFeature(SourceFeature sourceFeature, FeatureCollector features) {
+          if (sourceFeature.canBeLine()) {
+            features.splitLine("split")
+              .setZoomRange(0, 0)
+              .inheritAttrFromSource("attr");
+            features.anyGeometry("any")
+              .setZoomRange(0, 0)
+              .inheritAttrFromSource("attr");
+            features.line("full")
+              .setZoomRange(0, 0)
+              .inheritAttrFromSource("attr");
+            features.polygon("full-polygon")
+              .setZoomRange(0, 0)
+              .inheritAttrFromSource("attr");
+          }
+        }
+
+        @Override
+        public boolean splitOsmWayAtIntersections(OsmElement.Way way) {
+          return true;
+        }
+      }
+    );
+
+    assertSubmap(Map.of(
+      TileCoord.ofXYZ(0, 0, 0), List.of(
+        new ComparableFeature(new NormGeometry(TestUtils.newPolygon(120, 120, 140, 120, 140, 140, 120, 120)), "any",
+          Map.of(
+            "attr", "value1"
+          ), 42L),
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(140, 120, 128, 128)), "any", Map.of(
+          "attr", "value2"
+        ), 52L),
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(120, 120, 140, 120, 140, 140, 120, 120)), "full",
+          Map.of(
+            "attr", "value1"
+          ), 42L),
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(140, 120, 128, 128)), "full", Map.of(
+          "attr", "value2"
+        ), 52L),
+
+        new ComparableFeature(new NormGeometry(TestUtils.newPolygon(120, 120, 140, 120, 140, 140, 120, 120)),
+          "full-polygon",
+          Map.of(
+            "attr", "value1"
+          ), 42L),
+
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(120, 120, 140, 120)), "split", Map.of(
+          "attr", "value1"
+        ), 42L),
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(140, 120, 128, 128)), "split", Map.of(
+          "attr", "value2"
+        ), 52L),
+        new ComparableFeature(new NormGeometry(TestUtils.newLineString(140, 120, 140, 140, 120, 120)), "split", Map.of(
+          "attr", "value1"
+        ), 142L)
+      )
+    ), results.tiles);
+  }
+
+  @Test
+  void testSplitOsmLineWithLoop() throws Exception {
+    var results = runWithOsmElements(
+      Map.of("threads", "1"),
+      List.of(
+        new OsmElement.Node(1, GeoUtils.getWorldLat(0.5), GeoUtils.getWorldLon(0.25)),
+        new OsmElement.Node(2, GeoUtils.getWorldLat(0.5), GeoUtils.getWorldLon(0.5)),
+        new OsmElement.Node(3, GeoUtils.getWorldLat(0.5), GeoUtils.getWorldLon(0.75)),
+        new OsmElement.Node(4, GeoUtils.getWorldLat(0.75), GeoUtils.getWorldLon(0.5)),
+        with(new OsmElement.Way(4), way -> {
+          way.setTag("attr", "value1");
+          way.nodes().add(1, 2, 3, 4, 2);
+        })
+      ),
+      new Profile() {
+        @Override
+        public void processFeature(SourceFeature sourceFeature, FeatureCollector features) {
+          if (sourceFeature.canBeLine()) {
+            features.splitLine("layer")
+              .setZoomRange(0, 0)
+              .inheritAttrFromSource("attr");
+          }
+        }
+
+        @Override
+        public boolean splitOsmWayAtIntersections(OsmElement.Way way) {
+          return true;
+        }
+      }
+    );
+
+    assertSubmap(Map.of(
+      TileCoord.ofXYZ(0, 0, 0), List.of(
+        feature(newLineString(64, 128, 128, 128), Map.of(
+          "attr", "value1"
+        ), 42),
+        feature(newLineString(128, 128, 192, 128, 128, 192, 128, 128), Map.of(
+          "attr", "value1"
+        ), 142)
+      )
+    ), results.tiles);
   }
 
   @ParameterizedTest
@@ -2156,6 +2337,20 @@ class PlanetilerTests {
     }
   }
 
+  private static TileFormat extractTileFormat(String args) {
+    final Optional<TileFormat> format = Stream.of(TileFormat.values())
+      .filter(fmt -> args.contains("--tile-format=" + fmt.id()))
+      .findFirst();
+
+    if (format.isPresent()) {
+      return format.get();
+    } else if (args.contains("--tile-format=")) {
+      throw new IllegalArgumentException("unhandled tile format");
+    } else {
+      return TileFormat.MVT;
+    }
+  }
+
   private static TileCompression extractTileCompression(String args) {
     if (args.contains("tile-compression=none")) {
       return TileCompression.NONE;
@@ -2175,13 +2370,18 @@ class PlanetilerTests {
     "--free-osm-after-read",
     "--compress-temp",
     "--osm-parse-node-bounds",
+    "--tile-format=mlt",
+    "--tile-format=mlt --mlt-advanced",
     "--output-format=pmtiles",
+    "--output-format=pmtiles --tile-format=mlt",
     "--output-format=csv",
     "--output-format=tsv",
     "--output-format=proto",
     "--output-format=pbf",
+    "--output-format=pbf --tile-format=mlt",
     "--output-format=json",
     "--output-format=files",
+    "--output-format=files --tile-format=mlt",
     "--tile-compression=none",
     "--tile-compression=gzip",
     "--output-layerstats",
@@ -2196,12 +2396,13 @@ class PlanetilerTests {
     final TileCompression tileCompression = extractTileCompression(args);
 
     final TileArchiveConfig.Format format = extractFormat(args);
+    final TileFormat tileFormat = extractTileFormat(args);
     final String outputUri;
     final Path outputPath;
     switch (format) {
       case FILES -> {
         outputPath = tempDir.resolve("output");
-        outputUri = outputPath.toString() + "?format=files";
+        outputUri = outputPath + "?format=files";
       }
       default -> {
         outputPath = tempDir.resolve("output." + format.id());
@@ -2249,7 +2450,7 @@ class PlanetilerTests {
 
     try (var db = readableTileArchiveFactory.create(outputPath)) {
       int features = 0;
-      var tileMap = TestUtils.getTileMap(db, tileCompression);
+      var tileMap = TestUtils.getTileMap(db, tileCompression, tileFormat);
       for (var tile : tileMap.values()) {
         for (var feature : tile) {
           feature.geometry().validate();
@@ -2270,6 +2471,10 @@ class PlanetilerTests {
 
       if (checkMetadata) {
         assertSubmap(Map.of(
+          "format", switch (tileFormat) {
+            case MLT -> "application/vnd.maplibre-vector-tile";
+            case UNKNOWN, MVT -> "pbf";
+          },
           "planetiler:version", BuildInfo.get().version(),
           "planetiler:osm:osmosisreplicationtime", "2021-04-21T20:21:46Z",
           "planetiler:osm:osmosisreplicationseq", "2947",

@@ -19,15 +19,15 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
     <maven.source.excludeResources>true</maven.source.excludeResources>
-    <jackson.version>2.20.0</jackson.version>
-    <junit.version>6.0.0</junit.version>
+    <jackson.version>2.21.0</jackson.version>
+    <junit.version>6.0.2</junit.version>
     <jts.version>1.20.0</jts.version>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     <sonar.organization>onthegomap</sonar.organization>
     <sonar.projectKey>onthegomap_planetiler</sonar.projectKey>
     <sonar.moduleKey>${project.artifactId}</sonar.moduleKey>
     <sonar.exclusions>planetiler-benchmarks/**/*, planetiler-openmaptiles/**/*</sonar.exclusions>
-    <revision>0.9.3-ph-test-SNAPSHOT</revision>
+    <revision>0.9.4-ph-test-SNAPSHOT</revision>
     <timestamp>${maven.build.timestamp}</timestamp>
   </properties>
 
@@ -99,7 +99,7 @@
       <dependency>
         <groupId>org.snakeyaml</groupId>
         <artifactId>snakeyaml-engine</artifactId>
-        <version>2.10</version>
+        <version>3.0.1</version>
       </dependency>
       <dependency>
         <groupId>org.commonmark</groupId>
@@ -127,13 +127,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.20.0</version>
+        <version>5.21.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
-        <version>3.19.0</version>
+        <version>3.20.0</version>
       </dependency>
       <dependency>
         <groupId>org.yaml</groupId>
@@ -184,7 +184,7 @@
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
         <configuration>
           <java>
             <includes>
@@ -251,6 +251,9 @@
           <excludes>
             <exclude/>
           </excludes>
+          <excludesFile>
+            ${maven.multiModuleProjectDirectory}/planetiler-core/src/test/resources/exclude.txt
+          </excludesFile>
           <!-- by default surefire only includes tests matching Test*.java *Test.java or *TestCase.java -->
           <includes>
             <include>**/*.java</include>
@@ -265,7 +268,7 @@
       <plugin>
         <groupId>org.sonatype.central</groupId>
         <artifactId>central-publishing-maven-plugin</artifactId>
-        <version>0.9.0</version>
+        <version>0.10.0</version>
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>central</publishingServerId>
@@ -287,7 +290,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
-        <version>3.3.1</version>
+        <version>3.4.0</version>
         <executions>
           <execution>
             <id>attach-sources</id>
@@ -321,7 +324,7 @@
         <plugin>
           <groupId>com.google.cloud.tools</groupId>
           <artifactId>jib-maven-plugin</artifactId>
-          <version>3.4.6</version>
+          <version>3.5.1</version>
           <configuration>
             <skip>true</skip>
           </configuration>
@@ -330,7 +333,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.11.3</version>
+          <version>3.12.0</version>
           <configuration>
             <quiet>true</quiet>
             <doclint>-missing</doclint>
@@ -349,7 +352,7 @@
         <plugin>
           <groupId>org.sonarsource.scanner.maven</groupId>
           <artifactId>sonar-maven-plugin</artifactId>
-          <version>5.2.0.4988</version>
+          <version>5.3.0.6276</version>
         </plugin>
         <plugin>
           <groupId>org.jacoco</groupId>

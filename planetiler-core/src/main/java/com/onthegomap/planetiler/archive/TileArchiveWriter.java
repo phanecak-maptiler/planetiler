@@ -37,8 +37,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import org.maplibre.mlt.converter.ConversionConfig;
+import org.maplibre.mlt.converter.FeatureTableOptimizations;
+import org.maplibre.mlt.converter.MltConverter;
+import org.maplibre.mlt.converter.mvt.ColumnMapping;
+import org.maplibre.mlt.converter.mvt.MapboxVectorTile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -295,14 +301,36 @@ public class TileArchiveWriter {
             layerStats = null;
             bytes = null;
           } else {
-            var proto = tile.toProto();
-            encoded = proto.toByteArray();
+            encoded = switch (config.tileFormat()) {
+              case MLT -> {
+                MapboxVectorTile mltInput = tile.toMltInput(stats);
+                Map<Pattern, List<ColumnMapping>> columnMappings = Map.of();
+                var tilesetMetadata = MltConverter.createTilesetMetadata(mltInput, columnMappings, true, true, false);
+                Map<String, FeatureTableOptimizations> optimizations = Map.of();
+                var conversionConfig = ConversionConfig.builder()
+                  .includeIds(true)
+                  .useFastPFOR(config.mltFastPfor())
+                  .useFSST(config.mltFsst())
+                  .coercePropertyValues(true)
+                  .optimizations(optimizations)
+                  .preTessellatePolygons(config.mltTessellatePolygons())
+                  .useMortonEncoding(true)
+                  .build();
+                var mlt = MltConverter.convertMvt(mltInput, tilesetMetadata, conversionConfig, null);
+                layerStats = TileSizeStats.computeMltTileStats(tile, mltInput, mlt);
+                yield mlt;
+              }
+              case UNKNOWN, MVT -> {
+                var proto = tile.toProto();
+                layerStats = TileSizeStats.computeTileStats(proto);
+                yield proto.toByteArray();
+              }
+            };
             bytes = switch (config.tileCompression()) {
               case GZIP -> gzip(encoded);
               case NONE -> encoded;
               case UNKNOWN -> throw new IllegalArgumentException("cannot compress \"UNKNOWN\"");
             };
-            layerStats = TileSizeStats.computeTileStats(proto);
             if (encoded.length > config.tileWarningSizeBytes()) {
               LOGGER.warn("{} {}kb uncompressed",
                 tileFeatures.tileCoord(),
