@@ -27,6 +27,8 @@ import com.onthegomap.planetiler.geo.GeometryException;
 import com.onthegomap.planetiler.geo.GeometryType;
 import com.onthegomap.planetiler.geo.MutableCoordinateSequence;
 import com.onthegomap.planetiler.reader.WithTags;
+import com.onthegomap.planetiler.stats.DefaultStats;
+import com.onthegomap.planetiler.stats.Stats;
 import com.onthegomap.planetiler.util.Hilbert;
 import com.onthegomap.planetiler.util.LayerAttrStats;
 import java.util.ArrayList;
@@ -35,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -56,6 +59,7 @@ import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.geom.Puntal;
 import org.locationtech.jts.geom.impl.CoordinateArraySequence;
 import org.locationtech.jts.geom.impl.PackedCoordinateSequence;
+import org.maplibre.mlt.converter.mvt.MapboxVectorTile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import vector_tile.VectorTileProto;
@@ -204,10 +208,9 @@ public class VectorTile {
     return ((n >> 1) ^ (-(n & 1)));
   }
 
-  private static Geometry decodeCommands(GeometryType geomType, int[] commands, int scale) throws GeometryException {
+  private static Geometry decodeCommands(GeometryType geomType, int[] commands, double SCALE) throws GeometryException {
     try {
       GeometryFactory gf = GeoUtils.JTS_FACTORY;
-      double SCALE = (EXTENT << scale) / SIZE;
       int x = 0;
       int y = 0;
 
@@ -527,11 +530,24 @@ public class VectorTile {
   }
 
   /**
-   * Returns a vector tile protobuf object with all features in this tile.
+   * Alias for {@link #toProto(boolean)} where {@code includeIds=true}
    */
   public VectorTileProto.Tile toProto() {
+    return toProto(true);
+  }
+
+  /**
+   * Returns a vector tile protobuf object with all features in this tile.
+   *
+   * @param includeIds True to set IDs on each feature, false to exclude
+   */
+  public VectorTileProto.Tile toProto(boolean includeIds) {
     VectorTileProto.Tile.Builder tile = VectorTileProto.Tile.newBuilder();
     for (Map.Entry<String, Layer> e : layers.entrySet()) {
+      if (e.getValue().encodedFeatures.isEmpty()) {
+        continue;
+      }
+
       String layerName = e.getKey();
       Layer layer = e.getValue();
 
@@ -561,7 +577,7 @@ public class VectorTile {
           .setType(feature.geometry().geomType().asProtobufType())
           .addAllGeometry(Ints.asList(feature.geometry().commands()));
 
-        if (feature.id != NO_FEATURE_ID) {
+        if (includeIds && feature.id != NO_FEATURE_ID) {
           featureBuilder.setId(feature.id);
         }
 
@@ -639,6 +655,41 @@ public class VectorTile {
 
   public boolean isEmpty() {
     return layers.isEmpty();
+  }
+
+  public MapboxVectorTile toMltInput() {
+    return toMltInput(DefaultStats.get());
+  }
+
+  public MapboxVectorTile toMltInput(Stats stats) {
+    return new MapboxVectorTile(
+      layers.entrySet().stream().filter(e -> !e.getValue().encodedFeatures.isEmpty()).map(entry -> {
+        String name = entry.getKey();
+        Layer layer = entry.getValue();
+        var keys = layer.keys();
+        var values = layer.values();
+        List<org.maplibre.mlt.data.Feature> features = layer.encodedFeatures.stream().map(feature -> {
+          Map<String, Object> properties = new LinkedHashMap<>();
+          for (int i = 0; i < feature.tags.size(); i += 2) {
+            properties.put(keys.get(feature.tags.get(i)), values.get(feature.tags.get(i + 1)));
+          }
+          try {
+            return new org.maplibre.mlt.data.Feature(feature.id, feature.geometry.decodeToExtent(), properties);
+          } catch (GeometryException e) {
+            e.log(stats, "mlt_feature", "Error converting to MLT " + properties);
+            return null;
+          }
+        }).filter(Objects::nonNull).toList();
+        return new org.maplibre.mlt.data.Layer(name, features, EXTENT);
+      }).toList());
+  }
+
+  public Integer getNumKeys(String layer) {
+    return layers.get(layer).keys().size();
+  }
+
+  public Integer getNumValues(String layer) {
+    return layers.get(layer).values().size();
   }
 
   enum Command {
@@ -804,7 +855,12 @@ public class VectorTile {
 
     /** Converts an encoded geometry back to a JTS geometry. */
     public Geometry decode() throws GeometryException {
-      return decodeCommands(geomType, commands, scale);
+      return decodeCommands(geomType, commands, (EXTENT << scale) / SIZE);
+    }
+
+    /** Converts an encoded geometry back to a JTS geometry. */
+    private Geometry decodeToExtent() throws GeometryException {
+      return decodeCommands(geomType, commands, 1 << scale);
     }
 
     /** Returns this encoded geometry, scaled back to 0, so it is safe to emit to archive output. */
@@ -1082,6 +1138,19 @@ public class VectorTile {
       return newGeometry == geometry ? this : new Feature(
         layer,
         id,
+        newGeometry,
+        tags,
+        group
+      );
+    }
+
+    /**
+     * Returns a copy of this feature with {@code id} and {@code geometry} replaced.
+     */
+    public Feature copyWithIdAndGeometry(long newId, VectorGeometry newGeometry) {
+      return new Feature(
+        layer,
+        newId,
         newGeometry,
         tags,
         group
