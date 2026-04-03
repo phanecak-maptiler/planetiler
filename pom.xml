@@ -104,7 +104,7 @@
       <dependency>
         <groupId>org.commonmark</groupId>
         <artifactId>commonmark</artifactId>
-        <version>0.27.0</version>
+        <version>0.27.1</version>
       </dependency>
       <dependency>
         <groupId>org.junit.jupiter</groupId>
@@ -171,7 +171,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>buildnumber-maven-plugin</artifactId>
-        <version>3.2.1</version>
+        <version>3.3.0</version>
         <executions>
           <execution>
             <phase>validate</phase>
@@ -184,7 +184,7 @@
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>3.2.0</version>
         <configuration>
           <java>
             <includes>
