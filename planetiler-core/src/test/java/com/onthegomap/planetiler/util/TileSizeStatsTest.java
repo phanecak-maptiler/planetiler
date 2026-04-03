@@ -8,13 +8,16 @@ import com.onthegomap.planetiler.geo.TileCoord;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.maplibre.mlt.converter.ConversionConfig;
 import org.maplibre.mlt.converter.FeatureTableOptimizations;
 import org.maplibre.mlt.converter.MltConverter;
 import org.maplibre.mlt.converter.mvt.ColumnMapping;
+import org.maplibre.mlt.converter.mvt.ColumnMappingConfig;
 import org.maplibre.mlt.converter.mvt.MapboxVectorTile;
+import org.maplibre.mlt.decoder.MltDecoder;
 
 class TileSizeStatsTest {
   @Test
@@ -129,7 +132,7 @@ class TileSizeStatsTest {
         )
       ));
     MapboxVectorTile mltInput = vectorTile.toMltInput();
-    Map<Pattern, List<ColumnMapping>> columnMappings = Map.of();
+    ColumnMappingConfig columnMappings = new ColumnMappingConfig();
     var tilesetMetadata = MltConverter.createTilesetMetadata(mltInput, columnMappings, true);
     Map<String, FeatureTableOptimizations> optimizations = Map.of();
     var conversionConfig = ConversionConfig.builder().includeIds(true).useFSST(false).useFastPFOR(false)
@@ -161,6 +164,16 @@ class TileSizeStatsTest {
   }
 
   @Test
+  void issue1470_computeMltFastPforStats() throws IOException {
+    try (var is = Objects.requireNonNull(getClass().getResourceAsStream("/fastpfor.mlt"))) {
+      var bytes = is.readAllBytes();
+      var mlt = MltDecoder.decodeMlTile(bytes);
+      var mvt = new MapboxVectorTile(mlt.layers());
+      TileSizeStats.computeMltTileStats(null, mvt, bytes);
+    }
+  }
+
+  @Test
   void computeStats2FeaturesNested() throws IOException {
     VectorTile vectorTile = new VectorTile()
       .addLayerFeatures("a", List.of(
@@ -178,8 +191,8 @@ class TileSizeStatsTest {
         )
       ));
     MapboxVectorTile mltInput = vectorTile.toMltInput();
-    Map<Pattern, List<ColumnMapping>> columnMappings =
-      Map.of(Pattern.compile(".*"), List.of(new ColumnMapping("key", ":", true)));
+    ColumnMappingConfig columnMappings =
+      ColumnMappingConfig.of(Pattern.compile(".*"), List.of(new ColumnMapping("key", ":", true)));
     var tilesetMetadata = MltConverter.createTilesetMetadata(mltInput, columnMappings, true);
     var conversionConfig = ConversionConfig.builder().includeIds(true).useFSST(true).useFastPFOR(false)
       .optimizations(

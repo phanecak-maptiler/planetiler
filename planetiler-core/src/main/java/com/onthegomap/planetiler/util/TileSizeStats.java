@@ -46,6 +46,9 @@ import org.maplibre.mlt.converter.mvt.MapboxVectorTile;
 import org.maplibre.mlt.data.Feature;
 import org.maplibre.mlt.decoder.DecodingUtils;
 import org.maplibre.mlt.decoder.MltDecoder;
+import org.maplibre.mlt.metadata.stream.DictionaryType;
+import org.maplibre.mlt.metadata.stream.PhysicalStreamType;
+import org.maplibre.mlt.metadata.stream.StreamMetadata;
 import org.maplibre.mlt.metadata.stream.StreamMetadataDecoder;
 import org.maplibre.mlt.metadata.tileset.MltMetadata;
 import vector_tile.VectorTileProto;
@@ -182,7 +185,7 @@ public class TileSizeStats {
     // is called billions of times from multiple threads, so we generate a new instance per serializing thread
     ObjectWriter writer = new CsvMapper().writer(SCHEMA);
     return (tileCoord, archivedBytes, layerStats) -> {
-      int hilbert = tileCoord.hilbertEncoded();
+      long hilbert = tileCoord.hilbertEncoded();
       List<String> result = new ArrayList<>(layerStats.size());
       for (var layer : layerStats) {
         result.add(writer.writeValueAsString(new OutputRow(
@@ -289,8 +292,8 @@ public class TileSizeStats {
       layer.features().size(),
       countGeometries(layer.features()),
       encodedLayerAttributeSizes.getOrDefault(layer.name(), -1),
-      vtile.getNumKeys(layer.name()),
-      vtile.getNumValues(layer.name())
+      vtile == null ? 0 : vtile.getNumKeys(layer.name()),
+      vtile == null ? 0 : vtile.getNumValues(layer.name())
     )).toList();
   }
 
@@ -308,9 +311,8 @@ public class TileSizeStats {
       skipOverStream(tile, offset);
     } else if (columnMetadata.complexType != null &&
       columnMetadata.complexType.physicalType == MltMetadata.ComplexType.STRUCT) {
-      // skip over shared dictionary
-      skipOverStream(tile, offset);
-      skipOverStream(tile, offset);
+
+      skipOverSharedDictionary(tile, offset);
 
       for (var child : columnMetadata.complexType.children) {
         consumeColumn(child, tile, offset);
@@ -328,9 +330,22 @@ public class TileSizeStats {
     return 0;
   }
 
-  private static void skipOverStream(byte[] tile, IntWrapper offset) throws IOException {
+  private static void skipOverSharedDictionary(byte[] tile, IntWrapper offset) throws IOException {
+    boolean decoded = false;
+    while (!decoded) {
+      var metadata = skipOverStream(tile, offset);
+      var dictionaryType = metadata.logicalStreamType().dictionaryType();
+      if (metadata.physicalStreamType() == PhysicalStreamType.DATA &&
+        (dictionaryType == DictionaryType.SINGLE || dictionaryType == DictionaryType.SHARED)) {
+        decoded = true;
+      }
+    }
+  }
+
+  private static StreamMetadata skipOverStream(byte[] tile, IntWrapper offset) throws IOException {
     var streamMetadata = StreamMetadataDecoder.decode(tile, offset);
     offset.add(streamMetadata.byteLength());
+    return streamMetadata;
   }
 
   private static int countGeometries(List<Feature> features) {
@@ -377,7 +392,7 @@ public class TileSizeStats {
     int z,
     int x,
     int y,
-    int hilbert,
+    long hilbert,
     int archivedTileBytes,
     String layer,
     int layerBytes,
