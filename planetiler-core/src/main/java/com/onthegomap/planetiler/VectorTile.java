@@ -447,7 +447,7 @@ public class VectorTile {
     Coordinate coord = geometry.getCoordinate();
     int x = zigZagEncode((int) Math.round(coord.x * 4096 / 256));
     int y = zigZagEncode((int) Math.round(coord.y * 4096 / 256));
-    return Hilbert.hilbertXYToIndex(15, x, y);
+    return (int) Hilbert.hilbertXYToIndex(15, x, y);
   }
 
   /**
@@ -1070,7 +1070,7 @@ public class VectorTile {
       }
       int x = commands[1];
       int y = commands[2];
-      return Hilbert.hilbertXYToIndex(15, x >> scale, y >> scale);
+      return (int) Hilbert.hilbertXYToIndex(15, x >> scale, y >> scale);
     }
 
 
@@ -1227,7 +1227,7 @@ public class VectorTile {
         case Puntal ignored -> encode(new CoordinateArraySequence(geometry.getCoordinates()), shouldClosePath(geometry),
           geometry instanceof MultiPoint, GeometryType.POINT);
         case null -> LOGGER.warn("Null geometry type");
-        default -> LOGGER.warn("Unrecognized geometry type: " + geometry.getGeometryType());
+        default -> LOGGER.warn("Unrecognized geometry type: {}", geometry.getGeometryType());
       }
     }
 

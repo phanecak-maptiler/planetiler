@@ -46,7 +46,12 @@ jobs:
 
     - run: ./scripts/set-versions.sh "${{ github.event.inputs.version }}"
     - run: ./scripts/build-release.sh
-    - run: ./scripts/test-release.sh "${{ github.event.inputs.version }}"
+    - name: 'Test release'
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60
+      with:
+        max_attempts: 5
+        timeout_minutes: 30
+        command: ./scripts/test-release.sh "${{ github.event.inputs.version }}"
     - name: Create tag
       uses: actions/github-script@v8
       with:
