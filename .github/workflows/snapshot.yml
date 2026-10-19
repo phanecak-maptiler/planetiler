@@ -62,7 +62,7 @@ jobs:
 
   publish-latest:
     needs: snapshot
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
