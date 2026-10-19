@@ -29,7 +29,7 @@ jobs:
     - name: Set up JDK
       uses: actions/setup-java@v6
       with:
-        java-version: 21
+        java-version: 25
         distribution: 'temurin'
         cache: 'maven'
         server-id: central
@@ -59,3 +59,46 @@ jobs:
         MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
         MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
         OSSRH_GPG_SECRET_KEY_PASSWORD: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}
+
+  publish-latest:
+    needs: snapshot
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-latest-main
+      cancel-in-progress: false
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/download-artifact@v8
+      with:
+        name: planetiler-build
+        path: build-jar
+    - uses: actions/cache@v4
+      with:
+        path: launcher/.cache
+        key: jdk-${{ hashFiles('launcher/Makefile') }}
+    - name: Build launchers
+      run: make -C launcher VERSION=snapshot JAR="$(realpath build-jar/*with-deps.jar)"
+    - name: Publish rolling release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        set -euxo pipefail
+        cp build-jar/*with-deps.jar launcher/dist/planetiler.jar
+        # point the tag at this commit (no-op for watchers; only publishing a release notifies)
+        git tag -f latest-main "$GITHUB_SHA"
+        git push -f origin latest-main
+        cd launcher/dist
+        sha256sum planetiler* > checksums.txt
+        notes="Automated, unreleased build of ${GITHUB_SHA}. Experimental; use a tagged release for production."
+        if gh release view latest-main >/dev/null 2>&1; then
+          gh release upload latest-main * --clobber
+          gh release edit latest-main --notes "$notes"
+        else
+          gh release create latest-main * --prerelease --verify-tag \
+            --title "Latest main build" --notes "$notes"
+        fi
